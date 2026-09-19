@@ -1,0 +1,94 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            asset: bookmarkd-linux-x86_64
+            extension: ''
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            asset: bookmarkd-linux-aarch64
+            extension: ''
+          - os: macos-14
+            target: aarch64-apple-darwin
+            asset: bookmarkd-macos-arm64
+            extension: ''
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: bookmarkd-macos-x86_64
+            extension: ''
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            asset: bookmarkd-windows-x86_64.exe
+            extension: '.exe'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.94.0'
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Windows OpenSSL assembler
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+      - name: Static Windows CRT
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"RUSTFLAGS=-C target-feature=+crt-static" >> $env:GITHUB_ENV'
+      - run: npm ci --prefix web
+      - run: npm run check --prefix web
+      - run: npm run build --prefix web
+      - run: cargo test --locked --workspace --target ${{ matrix.target }}
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Package and smoke test
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/bookmarkd${{ matrix.extension }} dist/${{ matrix.asset }}
+          python scripts/release_check.py dist/${{ matrix.asset }}
+          cp LICENSE dist/LICENSE
+          cp docs/THIRD_PARTY.md dist/THIRD_PARTY.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum bookmarkd-* LICENSE THIRD_PARTY.md > SHA256SUMS
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "bookmarkd $GITHUB_REF_NAME" --generate-notes --prerelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: dist/*

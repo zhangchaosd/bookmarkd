@@ -1,0 +1,21 @@
+[Unit]
+Description=Private bookmark hub
+After=network.target
+
+[Service]
+Type=simple
+User=bookmarkd
+Group=bookmarkd
+WorkingDirectory=/srv/bookmarkd
+ExecStart=/usr/local/bin/bookmarkd --config /srv/bookmarkd/config.toml serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/bookmarkd
+
+[Install]
+WantedBy=multi-user.target

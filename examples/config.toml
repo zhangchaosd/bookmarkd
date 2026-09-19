@@ -1,0 +1,16 @@
+[server]
+listen = "127.0.0.1:8765"
+public_url = "https://bookmark.example.com"
+allow_insecure_localhost = false
+
+[storage]
+business_db = "bookmarks.db"
+
+[auth]
+app_id = "bookmarkd"
+rp_id = "example.com"
+rp_name = "Private Services"
+user_name = "owner"
+user_id_file = "user-id.txt"
+store = "auth.db"
+setup_mode = "disabled"
