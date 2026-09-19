@@ -32,11 +32,13 @@ authentication within five minutes; call `/auth/reauth/begin` and `finish` when
 | `POST /api/v1/bookmarks/{id}/restore` | `{version,folder_id?}`; unavailable original folder must be resolved |
 | `POST /api/v1/bookmarks/batch` | `{action,items:[{id,version}],folder_id?,tags?}`; actions move/delete/add-tags/remove-tags, ≤500, all-or-nothing |
 | `POST /api/v1/bookmarks/reorder` | `{scope:"pinned"|"folder",items:[{id,version}]}` in desired order |
+| `POST /api/v1/bookmarks/move` | `{id,version,revision,scope:"library"|"folder"|"pinned",folder_id?,anchor_id?,placement?:"before"|"after"}`; folder scope requires folder_id (null = inbox), omitted anchor appends |
 | `GET/POST /api/v1/folders` | List/create; creation `{name,parent_id?}` |
 | `PATCH /api/v1/folders/{id}` | `{version,name?,parent_id?}`; rejects cycles, depth >32 and sibling collisions |
 | `DELETE /api/v1/folders/{id}` | `{version,strategy:"trash"|"move",folder_id?}`; descendants handled transactionally |
 | `POST /api/v1/folders/{id}/restore` | `{version,parent_id?}`; restore same deletion batch, reject name conflicts |
 | `POST /api/v1/folders/reorder` | `{items:[{id,version}]}` |
+| `POST /api/v1/folders/move` | `{id,version,revision,parent_id,anchor_id?,placement?:"before"|"after"}`; null parent = root, anchor must be a destination sibling |
 | `GET/POST /api/v1/tags` | List display names / create `{name}` |
 | `PATCH/DELETE /api/v1/tags/{urlencoded-name}` | `{revision,name?}`; tag rename/remove across bookmarks; revision protects bulk changes |
 | `GET /api/v1/library/revision` | Lightweight change counter |
@@ -66,3 +68,8 @@ Business storage is a SQLite transaction containing a complete typed library
 snapshot and a separate idempotency table. This favors simple all-or-nothing
 validation; large-library performance needs measurement. AuthStore is independent
 and has normalized identity, credential, grant and session tables.
+
+Anchor-based moves include off-page siblings in one transaction and reject stale
+library revisions or entity versions with HTTP 409. Folder moves reject cycles,
+excessive depth and duplicate sibling names. Pinned order is independent of normal
+order; moving into a folder preserves the pin. Move requests accept Idempotency-Key.

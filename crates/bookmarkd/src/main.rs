@@ -1,6 +1,7 @@
 mod config;
 mod http;
 mod model;
+mod ordering;
 mod store;
 mod transfer;
 use anyhow::{Result, ensure};

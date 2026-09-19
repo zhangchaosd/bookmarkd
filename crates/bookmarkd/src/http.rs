@@ -667,8 +667,7 @@ fn api(
                 entries.sort_by_key(|b| {
                     (
                         b.score(search),
-                        !b.pinned,
-                        if b.pinned {
+                        if q.get("pinned").is_some_and(|v| v == "true") {
                             b.pinned_position
                         } else {
                             b.position
@@ -706,6 +705,9 @@ fn api(
 }
 fn mutate(l: &mut Library, method: &Method, p: &[&str], v: &Value) -> Result<Value> {
     match (method.as_str(), p) {
+        ("POST", [kind @ ("bookmarks" | "folders"), "move"]) => {
+            crate::ordering::move_item(l, kind, v)
+        }
         ("POST", ["tags"]) => {
             let name = v["name"].as_str().unwrap_or("").trim();
             model::name(name)?;

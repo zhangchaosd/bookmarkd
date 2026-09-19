@@ -94,3 +94,19 @@ tags; organize mode allows horizontal scrolling. Copy/edit controls use inline
 SVG icons, and notes/folder metadata remain available through the title tooltip
 and editor. Frontend type checks/build and the existing end-to-end flow passed
 after the change. README screenshots were refreshed from the inspected UI.
+
+## Drag-and-drop follow-up
+
+Desktop mouse dragging passed in Chromium: bookmark before-row ordering, moving
+into a sidebar folder and out to Inbox, nesting folders, moving them to root,
+and reordering sibling folders. The full authentication/import/export/recovery
+scenario also passed (4.3 seconds overall) after these operations. A fixed root
+drop target avoids moving the source element during drag startup. Touch dragging
+is not implemented; editing and batch-move controls remain available.
+
+All 12 Rust tests passed, including new coverage for 150-item ordering across
+pagination, independent pinned positions, preserved bookmark metadata, stale
+revision rejection and transactional rollback of invalid folder/anchor moves.
+Frontend checks reported zero errors/warnings; production build, Rust formatting
+and strict Clippy passed. Current frontend assets are approximately 79 KiB JS
+(30.7 KiB gzip) and 11 KiB CSS.

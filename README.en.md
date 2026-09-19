@@ -21,6 +21,8 @@ Compact three-column browsing: name with icon, tags, and URL. Rows are 32px by d
 - **Migration and operations:** HTML/JSON import preview, exports, capture bookmarklet, SQLite online backups and offline restores.
 - **Reusable authentication:** embedded Rust crate with shared local authoritative credentials and separate host-scoped sessions; no SSO.
 
+On desktop, drag a bookmark's left handle to another row's upper/lower edge to reorder, onto a sidebar folder to move it inside, or onto Inbox to move it out. Folders can also be dragged: the center nests them, the edges reorder siblings, and “移至根目录” moves them to the root. Changes save automatically. Clear search/tag filters before reordering; moving into folders remains available while filtered. On touch devices, use editing and batch moves.
+
 ## Download and run
 
 Download from [Releases](https://github.com/zhangchaosd/bookmarkd/releases) and verify `SHA256SUMS`. Each artifact includes a native startup and dynamic dependency manifest.

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -199,6 +199,95 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   expect(
     (await api(`/api/v1/imports/${preview.id}/commit`, 'POST', {})).value.added
   ).toBe(1);
+  // Native mouse dragging: row order, folder membership, folder nesting and root moves.
+  const sibling = (await api('/api/v1/folders', 'POST', { name: '工具' }))
+    .value;
+  await page.goto('http://localhost:8765/library');
+  const row = (title: string) =>
+    page
+      .locator('tbody tr')
+      .filter({ has: page.getByRole('link', { name: title, exact: true }) });
+  const folderButton = (name: string) =>
+    page.locator('nav .folder-nav').filter({ hasText: name });
+  async function drag(source: Locator, target: Locator, y = 0.5) {
+    await source.scrollIntoViewIfNeeded();
+    const from = (await source.boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      from.x + from.width / 2 + 12,
+      from.y + from.height / 2 + 3,
+      { steps: 1 }
+    );
+    await expect(page.locator('[data-dragging="true"]')).toHaveCount(1);
+    await target.scrollIntoViewIfNeeded();
+    const to = (await target.boundingBox())!;
+    await page.mouse.move(
+      to.x + Math.min(to.width / 2, 60),
+      to.y + to.height * y,
+      { steps: 10 }
+    );
+    await expect(target).toHaveAttribute('data-drop', /before|after|inside/);
+    const response = page.waitForResponse(
+      (r) => r.url().endsWith('/move') && r.request().method() === 'POST'
+    );
+    await page.mouse.up();
+    expect((await response).status()).toBe(200);
+    await expect(page.locator('.bookmark-list')).toHaveAttribute(
+      'aria-busy',
+      'false'
+    );
+    await expect(page.locator('[data-dragging]')).toHaveCount(0);
+    await expect(
+      page.getByRole('status').filter({ hasText: '已移动并保存' })
+    ).toBeVisible();
+  }
+  await expect(row('中文学习 Rust')).toBeVisible();
+  await drag(row('中文学习 Rust').locator('.drag-handle'), row('内网'), 0.1);
+  expect(
+    (await api('/api/v1/bookmarks')).value.items
+      .map((x: any) => x.id)
+      .indexOf(b.id)
+  ).toBeLessThan(
+    (await api('/api/v1/bookmarks')).value.items
+      .map((x: any) => x.id)
+      .indexOf(first.value.id)
+  );
+  await drag(
+    row('中文学习 Rust').locator('.drag-handle'),
+    folderButton('学习')
+  );
+  expect((await api('/api/v1/bookmarks/' + b.id)).value.folder_id).toBe(f.id);
+  await folderButton('学习').click();
+  await expect(row('中文学习 Rust')).toBeVisible();
+  await drag(
+    row('中文学习 Rust').locator('.drag-handle'),
+    page.getByRole('button', { name: '▣ 收件箱', exact: true })
+  );
+  await expect(row('中文学习 Rust')).toHaveCount(0);
+  expect((await api('/api/v1/bookmarks/' + b.id)).value.folder_id).toBeNull();
+  await drag(folderButton('工具'), folderButton('学习'));
+  expect(
+    (await api('/api/v1/folders')).value.find((x: any) => x.id === sibling.id)
+      .parent_id
+  ).toBe(f.id);
+  await drag(
+    folderButton('工具'),
+    page.getByRole('button', { name: '↑ 移至根目录', exact: true })
+  );
+  expect(
+    (await api('/api/v1/folders')).value.find((x: any) => x.id === sibling.id)
+      .parent_id
+  ).toBeNull();
+  await drag(folderButton('工具'), folderButton('学习'), 0.1);
+  let folderList = (await api('/api/v1/folders')).value;
+  expect(
+    folderList.find((x: any) => x.id === sibling.id).position
+  ).toBeLessThan(folderList.find((x: any) => x.id === f.id).position);
+  await page.getByRole('button', { name: '▦ 全部收藏', exact: true }).click();
+  await expect(row('中文学习 Rust')).toBeVisible();
+  await page.reload();
+  await expect(row('中文学习 Rust')).toBeVisible();
   const exported = (
     await api('/api/v1/exports', 'POST', {
       format: 'json',

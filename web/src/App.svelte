@@ -115,6 +115,7 @@
     }
   }
   function clearPrivate() {
+    resetDrag();
     authenticated = false;
     bookmarks = [];
     folders = [];
@@ -300,16 +301,224 @@
     selected = [];
     await load();
   }
-  async function moveUp(b: Bookmark) {
-    const items = [...bookmarks];
-    const n = items.findIndex((x) => x.id === b.id);
-    if (n <= 0) return;
-    [items[n], items[n - 1]] = [items[n - 1], items[n]];
-    await request('/api/v1/bookmarks/reorder', 'POST', {
-      scope: folder === 'pinned' ? 'pinned' : 'folder',
-      items: items.map((b) => ({ id: b.id, version: b.version })),
-    });
+  type DragItem = {
+    kind: 'bookmarks' | 'folders';
+    id: string;
+    version: number;
+    title: string;
+    revision: number;
+  };
+  type DropTarget =
+    | { kind: 'bookmark'; id: string }
+    | { kind: 'folder'; id: string }
+    | { kind: 'root' }
+    | { kind: 'pinned' };
+  let dragged: DragItem | null = null;
+  let dropHint = '';
+  $: folderRows = flattenFolders(folders);
+  function flattenFolders(
+    items: Folder[],
+    parent: string | null = null,
+    depth = 0
+  ): { folder: Folder; depth: number }[] {
+    return items
+      .filter((f) => f.parent_id === parent)
+      .flatMap((f) => [
+        { folder: f, depth },
+        ...flattenFolders(items, f.id, depth + 1),
+      ]);
+  }
+  function resetDrag() {
+    dragged = null;
+    dropHint = '';
+    document
+      .querySelectorAll('[data-drop], [data-dragging]')
+      .forEach((node) => {
+        node.removeAttribute('data-drop');
+        node.removeAttribute('data-dragging');
+      });
+  }
+  function dragSource(
+    node: HTMLElement,
+    item: Omit<DragItem, 'revision'> | null
+  ) {
+    node.draggable = !!item;
+    const start = (event: DragEvent) => {
+      if (!item || busy || view !== 'library') {
+        event.preventDefault();
+        return;
+      }
+      const control = (event.target as HTMLElement).closest('button,input');
+      if (control && control !== node) {
+        event.preventDefault();
+        return;
+      }
+      dragged = { ...item, revision };
+      node.dataset.dragging = 'true';
+      event.dataTransfer?.setData('application/x-bookmarkd-item', item.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    };
+    node.addEventListener('dragstart', start);
+    node.addEventListener('dragend', resetDrag);
+    return {
+      update(value: typeof item) {
+        item = value;
+        node.draggable = !!value;
+      },
+      destroy() {
+        node.removeEventListener('dragstart', start);
+        node.removeEventListener('dragend', resetDrag);
+      },
+    };
+  }
+  function dropPosition(
+    node: HTMLElement,
+    event: DragEvent,
+    target: DropTarget
+  ): 'before' | 'after' | 'inside' | null {
+    if (!dragged || busy || view !== 'library') return null;
+    if ('id' in target && target.id === dragged.id) return null;
+    if (target.kind === 'pinned')
+      return dragged.kind === 'bookmarks' ? 'inside' : null;
+    if (target.kind === 'root') return 'inside';
+    if (target.kind === 'bookmark') {
+      if (dragged.kind !== 'bookmarks' || query.trim() || tag) return null;
+      const rect = node.getBoundingClientRect();
+      return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    }
+    if (dragged.kind === 'bookmarks') return 'inside';
+    // Reject moving a folder onto its descendants before sending the request.
+    let parent: string | null = target.id;
+    while (parent) {
+      if (parent === dragged.id) return null;
+      parent = folders.find((f) => f.id === parent)?.parent_id || null;
+    }
+    const rect = node.getBoundingClientRect(),
+      fraction = (event.clientY - rect.top) / rect.height;
+    return fraction < 0.25 ? 'before' : fraction > 0.75 ? 'after' : 'inside';
+  }
+  function dropTarget(node: HTMLElement, target: DropTarget) {
+    const over = (event: DragEvent) => {
+      const position = dropPosition(node, event, target);
+      if (!position) {
+        delete node.dataset.drop;
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      node.dataset.drop = position;
+      dropHint =
+        target.kind === 'root'
+          ? dragged?.kind === 'folders'
+            ? '移至根目录'
+            : '移出目录，放入收件箱'
+          : target.kind === 'pinned'
+            ? '添加到常用置顶'
+            : position === 'inside'
+              ? '移入该目录'
+              : position === 'before'
+                ? '放在此项之前'
+                : '放在此项之后';
+    };
+    const leave = (event: DragEvent) => {
+      if (!node.contains(event.relatedTarget as Node | null)) {
+        delete node.dataset.drop;
+        dropHint = '';
+      }
+    };
+    const drop = (event: DragEvent) => {
+      const position = dropPosition(node, event, target),
+        item = dragged;
+      if (!position || !item) return;
+      event.preventDefault();
+      event.stopPropagation();
+      resetDrag();
+      run(() => dropItem(item, target, position));
+    };
+    node.addEventListener('dragover', over);
+    node.addEventListener('dragleave', leave);
+    node.addEventListener('drop', drop);
+    return {
+      update(value: DropTarget) {
+        target = value;
+      },
+      destroy() {
+        node.removeEventListener('dragover', over);
+        node.removeEventListener('dragleave', leave);
+        node.removeEventListener('drop', drop);
+      },
+    };
+  }
+  async function dropItem(
+    item: DragItem,
+    target: DropTarget,
+    position: 'before' | 'after' | 'inside'
+  ) {
+    const data: Record<string, unknown> = {
+      id: item.id,
+      version: item.version,
+      revision: item.revision,
+      placement: position === 'before' ? 'before' : 'after',
+    };
+    if (item.kind === 'bookmarks') {
+      if (target.kind === 'bookmark') {
+        data.scope =
+          folder === 'pinned'
+            ? 'pinned'
+            : folder === 'all'
+              ? 'library'
+              : 'folder';
+        if (data.scope === 'folder') data.folder_id = folder || null;
+        data.anchor_id = target.id;
+      } else if (target.kind === 'pinned') data.scope = 'pinned';
+      else {
+        data.scope = 'folder';
+        data.folder_id = target.kind === 'folder' ? target.id : null;
+      }
+    } else {
+      if (target.kind === 'folder') {
+        const destination = folders.find((f) => f.id === target.id);
+        if (!destination) throw new Error('目标目录已变化，请刷新后重试');
+        data.parent_id =
+          position === 'inside' ? destination.id : destination.parent_id;
+        if (position !== 'inside') data.anchor_id = destination.id;
+      } else data.parent_id = null;
+    }
+    try {
+      await request(
+        `/api/v1/${item.kind}/move`,
+        'POST',
+        data,
+        crypto.randomUUID()
+      );
+    } catch (e) {
+      try {
+        await load();
+      } catch {
+        /* Keep the original failure visible. */
+      }
+      throw e;
+    }
+    selected = [];
+    notice = '已移动并保存';
     await load();
+  }
+  async function moveUp(b: Bookmark) {
+    const index = bookmarks.findIndex((x) => x.id === b.id);
+    if (index <= 0) return;
+    if (query.trim() || tag) throw new Error('请清空搜索和标签筛选后调整顺序');
+    await dropItem(
+      {
+        kind: 'bookmarks',
+        id: b.id,
+        version: b.version,
+        title: b.title,
+        revision,
+      },
+      { kind: 'bookmark', id: bookmarks[index - 1].id },
+      'before'
+    );
   }
   function folderPath(f: Folder): string {
     const parent = folders.find((x) => x.id === f.parent_id);
@@ -490,17 +699,41 @@
           class:active={view === 'library' && folder === 'all'}
           on:click={() => nav('library')}>▦ 全部收藏</button
         ><button
+          use:dropTarget={{ kind: 'pinned' }}
           class:active={view === 'library' && folder === 'pinned'}
           on:click={() => nav('library', 'pinned')}>☆ 常用置顶</button
         ><button
+          use:dropTarget={{ kind: 'root' }}
+          class:drop-ready={!!dragged}
+          title="拖到这里，将收藏移出目录；目录本身会移到根目录"
           class:active={view === 'library' && folder === ''}
           on:click={() => nav('library', '')}>▣ 收件箱</button
         >
-        <div class="nav-label">文件夹</div>
-        {#each folders as f}<button
-            class:active={folder === f.id}
-            title={folderPath(f)}
-            on:click={() => nav('library', f.id)}>▱ {folderPath(f)}</button
+        <button
+          class="root-drop"
+          class:drop-ready={!!dragged}
+          use:dropTarget={{ kind: 'root' }}
+          on:click={() => nav('library', '')}
+          >{dragged?.kind === 'folders'
+            ? '↑ 移至根目录'
+            : dragged
+              ? '↑ 移出目录 → 收件箱'
+              : '文件夹 · 根目录'}</button
+        >
+        {#each folderRows as row (row.folder.id)}<button
+            class="folder-nav"
+            style:padding-left={`${14 + row.depth * 12}px`}
+            use:dragSource={{
+              kind: 'folders',
+              id: row.folder.id,
+              version: row.folder.version,
+              title: row.folder.name,
+            }}
+            use:dropTarget={{ kind: 'folder', id: row.folder.id }}
+            class:active={folder === row.folder.id}
+            title={folderPath(row.folder) + '（可拖动排序或移动目录）'}
+            on:click={() => nav('library', row.folder.id)}
+            >▱ {row.folder.name}</button
           >{/each}
         <div class="nav-label">管理</div>
         <button class:active={view === 'trash'} on:click={() => nav('trash')}
@@ -816,7 +1049,17 @@
             >
           </div>{/if}
         <div class="list-heading">
-          <span>{total} 条收藏</span><span
+          <span>{total} 条收藏</span>
+          <span class="drag-hint" role="status"
+            >{dropHint ||
+              (dragged
+                ? '拖到目录中移入，拖到收件箱移出；边线表示排序位置'
+                : view === 'library'
+                  ? query.trim() || tag
+                    ? '筛选中可拖入目录；清空筛选后可拖动排序'
+                    : '拖动行可排序，拖到左侧目录可移动'
+                  : '')}</span
+          ><span
             >{folder === 'all'
               ? '全部目录'
               : folder === 'pinned'
@@ -824,7 +1067,7 @@
                 : '当前目录'}</span
           >
         </div>
-        <div class="bookmark-list" class:organizing={organize}>
+        <div class="bookmark-list" class:organizing={organize} aria-busy={busy}>
           <table
             class="bookmark-table"
             aria-label={view === 'trash' ? '回收站收藏' : '收藏列表'}
@@ -844,9 +1087,25 @@
             >
             <tbody>
               {#each bookmarks as b (b.id)}
-                <tr class="bookmark" class:selected={selected.includes(b.id)}>
+                <tr
+                  use:dragSource={view === 'library'
+                    ? {
+                        kind: 'bookmarks',
+                        id: b.id,
+                        version: b.version,
+                        title: b.title,
+                      }
+                    : null}
+                  use:dropTarget={{ kind: 'bookmark', id: b.id }}
+                  class="bookmark"
+                  class:selected={selected.includes(b.id)}
+                >
                   <td>
                     <div class="name-cell">
+                      {#if view === 'library'}<span
+                          class="drag-handle"
+                          aria-hidden="true"><RowIcon name="grip" /></span
+                        >{/if}
                       {#if organize}<input
                           aria-label={'选择 ' + b.title}
                           type="checkbox"
@@ -855,6 +1114,7 @@
                         />{/if}
                       <a
                         class="bookmark-link"
+                        draggable="false"
                         href={b.url_raw}
                         target={preferences.new_tab ? '_blank' : '_self'}
                         rel="noopener noreferrer"

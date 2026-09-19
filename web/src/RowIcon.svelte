@@ -1,5 +1,6 @@
 <script lang="ts">
-  export let name: 'copy' | 'edit' | 'pin' | 'up' | 'trash' | 'restore';
+  export let name:
+    'copy' | 'edit' | 'pin' | 'up' | 'trash' | 'restore' | 'grip';
   export let filled = false;
 </script>
 
@@ -15,7 +16,12 @@
   aria-hidden="true"
   focusable="false"
 >
-  {#if name === 'copy'}
+  {#if name === 'grip'}
+    <path
+      d="M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01"
+      stroke-width="3"
+    />
+  {:else if name === 'copy'}
     <rect x="8" y="8" width="12" height="12" rx="2" />
     <path d="M16 8V4H4v12h4" />
   {:else if name === 'edit'}
