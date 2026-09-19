@@ -46,8 +46,20 @@ requirements. CI installs browser dependencies on its Ubuntu runner.
 The Release workflow builds Linux x86_64/aarch64, macOS arm64/x86_64 and Windows
 x86_64 on native runners. Each artifact's `.manifest.json` captures the actual OS,
 architecture, program version, startup/backup/restore outcome and link evidence.
-A successful workflow is the evidence for a platform; this document does not
-pre-emptively claim a job that has not run or passed.
+The initial [v0.1.0 release workflow](https://github.com/zhangchaosd/bookmarkd/actions/runs/35440914018) **passed all five native jobs and publication**.
+The [latest recovery regression CI](https://github.com/zhangchaosd/bookmarkd/actions/runs/35441731909) also passed.
+All release attachments were downloaded and every entry in `SHA256SUMS` verified.
+
+| Artifact | Actual native test environment | Result |
+|---|---|---|
+| Linux x86_64 | Ubuntu runner, kernel 6.17.0, glibc 2.39 | Build, tests, startup and restore passed |
+| Linux aarch64 | Ubuntu ARM runner, kernel 6.17.0, glibc 2.39 | Build, tests, startup and restore passed |
+| macOS arm64 | macOS 14.8.9 | Build, tests, startup and restore passed |
+| macOS x86_64 | macOS 15.7.9 | Build, tests, startup and restore passed |
+| Windows x86_64 | Windows Server 2022, build 20348 | Build, tests, startup and restore passed |
+
+These are tested environments, not claims about the minimum compatible OS version.
+The downloaded Linux x86_64 artifact also ran directly on the local Fedora host.
 
 ## Not claimed / 尚未验收
 
