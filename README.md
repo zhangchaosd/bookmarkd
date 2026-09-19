@@ -7,6 +7,9 @@
 
 把收藏从浏览器中独立出来。一个自托管、单用户的收藏 Web 应用：Rust 服务端、Svelte 中文界面、SQLite 本地数据，前端嵌入可执行文件。运行无需 Node.js、外部数据库、CDN 或认证服务。
 
+
+![bookmarkd desktop interface](docs/images/desktop.png)
+
 ## 功能
 
 - **仅 Passkey 登录**：极简登录页、可选 30 天绝对有效期；终端一次性令牌注册与恢复，无密码后门。

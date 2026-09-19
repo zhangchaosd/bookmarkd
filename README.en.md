@@ -7,6 +7,9 @@
 
 Your bookmarks, independent of your browser. A self-hosted, single-user web app with a Rust backend, a Chinese Svelte interface, local SQLite databases, and embedded frontend assets. No Node.js runtime, external database, CDN, or authentication server is required to run it.
 
+
+![bookmarkd desktop interface](docs/images/desktop.png)
+
 ## Features
 
 - **Passkey-only authentication:** one login button, optional absolute 30-day sessions, terminal-authorized setup and recovery; no password fallback.
