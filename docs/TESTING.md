@@ -28,7 +28,10 @@ Node.js 24.18.0; Playwright 1.60.0 / Chromium 148.0.7778.96.
   warnings and repeat commit; JSON full-field transfer into an empty second host;
   separate business libraries; shared Passkey login; copied session rejection;
   logout; cross-host credential revocation; 32-byte authenticator user handle;
-  desktop/mobile screenshots; browser uncaught-error check.
+  desktop/mobile screenshots; browser uncaught-error check; offline restoration
+  of a populated business/auth backup, invalidation of pre-backup sessions, and
+  a fresh Passkey login to the restored three-entry library.
+- Both debug and release-optimized binaries passed the browser integration scenario.
 - Native executable smoke test: init, config validate, server start, health,
   embedded UI, anonymous session endpoint, online backup including auth, stopped
   server auth restore, and doctor all passed. Dynamic dependencies were libc,

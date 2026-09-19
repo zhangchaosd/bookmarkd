@@ -310,5 +310,39 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await expect(
     page.getByRole('button', { name: '使用 Passkey 登录', exact: true })
   ).toBeVisible();
+  // Restore a populated backup offline; never revive its old login sessions.
+  await Promise.all(
+    [server, second].map(
+      (proc) =>
+        new Promise<void>((resolve) => {
+          proc.once('exit', () => resolve());
+          proc.kill();
+        })
+    )
+  );
+  cli('restore', '--input', backup, '--include-auth', '--yes');
+  server = await start();
+  await context.addCookies([
+    {
+      name: 'bookmarkd_session',
+      value: session.value,
+      url: 'http://localhost:8765',
+    },
+  ]);
+  await page.goto('http://localhost:8765/login');
+  await expect(
+    page.getByRole('button', { name: '使用 Passkey 登录', exact: true })
+  ).toBeVisible();
+  expect(
+    (
+      await context.request.get('http://localhost:8765/api/v1/bookmarks')
+    ).status()
+  ).toBe(401);
+  // Explicit auth rollback restores the old credential, as documented; fresh login is required.
+  await page
+    .getByRole('button', { name: '使用 Passkey 登录', exact: true })
+    .click();
+  await expect(page.getByRole('link', { name: '中文学习 Rust' })).toBeVisible();
+  expect((await api('/api/v1/bookmarks')).value.total).toBe(3);
   expect(errors).toEqual([]);
 });
