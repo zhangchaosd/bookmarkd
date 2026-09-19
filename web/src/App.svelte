@@ -75,12 +75,20 @@
       density: 'comfortable',
       new_tab: true,
     };
+  const palettes = [
+    { id: 'forest', name: '森林绿', color: '#397753' },
+    { id: 'ocean', name: '海洋蓝', color: '#2563a6' },
+    { id: 'violet', name: '鸢尾紫', color: '#7651a8' },
+    { id: 'amber', name: '暖琥珀', color: '#956014' },
+    { id: 'slate', name: '石墨灰', color: '#526175' },
+  ];
   let batchFolder = '',
     batchTags = '',
     sessionId = '',
     channel: BroadcastChannel | undefined;
   let searchTimer: ReturnType<typeof setTimeout>;
   $: document.documentElement.dataset.theme = preferences.theme;
+  $: document.documentElement.dataset.palette = preferences.palette || 'forest';
   $: document.documentElement.dataset.density = preferences.density;
   $: bookmarklet = `javascript:(()=>{const u=new URL('/capture',${JSON.stringify(location.origin)});u.searchParams.set('url',location.href);u.searchParams.set('title',document.title);window.open(u,'_blank','noopener,noreferrer')})()`;
   function focusDialog(node: HTMLDialogElement) {
@@ -785,12 +793,38 @@
           <section class="panel">
             <h2>浏览偏好</h2>
             <label
-              >主题<select bind:value={preferences.theme}
+              >明暗模式<select bind:value={preferences.theme}
                 ><option value="system">跟随系统</option><option value="light"
                   >浅色</option
                 ><option value="dark">深色</option></select
               ></label
-            ><label
+            >
+            <fieldset class="palette-picker">
+              <legend>配色主题</legend>
+              {#each palettes as palette}
+                <label
+                  class="palette-option"
+                  class:chosen={(preferences.palette || 'forest') ===
+                    palette.id}
+                >
+                  <input
+                    type="radio"
+                    name="palette"
+                    value={palette.id}
+                    checked={(preferences.palette || 'forest') === palette.id}
+                    on:change={() => (preferences.palette = palette.id)}
+                  />
+                  <span
+                    class="palette-swatch"
+                    style:background={palette.color}
+                    aria-hidden="true"
+                  ></span>
+                  {palette.name}
+                </label>
+              {/each}
+            </fieldset>
+            <p class="muted">选择后立即预览，点击「保存偏好」保留设置。</p>
+            <label
               >显示密度<select bind:value={preferences.density}
                 ><option value="comfortable">舒适</option><option
                   value="compact">紧凑</option

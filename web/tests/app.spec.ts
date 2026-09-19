@@ -288,6 +288,38 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await expect(row('中文学习 Rust')).toBeVisible();
   await page.reload();
   await expect(row('中文学习 Rust')).toBeVisible();
+  // Palette preview, independent dark mode, and server-backed persistence.
+  await page.getByRole('button', { name: '⚙ 设置与迁移', exact: true }).click();
+  for (const [id, name] of [
+    ['forest', '森林绿'],
+    ['ocean', '海洋蓝'],
+    ['violet', '鸢尾紫'],
+    ['amber', '暖琥珀'],
+    ['slate', '石墨灰'],
+  ]) {
+    await page.getByRole('radio', { name, exact: true }).check();
+    await expect(page.locator('html')).toHaveAttribute('data-palette', id);
+  }
+  await page.getByRole('radio', { name: '海洋蓝', exact: true }).check();
+  await page.getByLabel('明暗模式').selectOption('dark');
+  await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
+  await page.getByRole('button', { name: '保存偏好', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('偏好已保存');
+  await page.reload();
+  await expect(
+    page.getByRole('radio', { name: '海洋蓝', exact: true })
+  ).toBeChecked();
+  await expect(page.getByLabel('明暗模式')).toHaveValue('dark');
+  await page.getByLabel('明暗模式').selectOption('system');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('html')).toHaveCSS('color-scheme', 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
+  await page.getByRole('radio', { name: '森林绿', exact: true }).check();
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.getByRole('button', { name: '保存偏好', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('偏好已保存');
+  await page.getByRole('button', { name: '▦ 全部收藏', exact: true }).click();
   const exported = (
     await api('/api/v1/exports', 'POST', {
       format: 'json',

@@ -57,11 +57,11 @@ a:hover {
 .primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 .primary:hover {
   background: var(--accent-hover);
-  color: white;
+  color: var(--on-accent);
 }
 .danger,
 .error {
@@ -785,4 +785,42 @@ nav .folder-nav {
   .drag-hint {
     display: none;
   }
+}
+
+.palette-picker {
+  border: 0;
+  padding: 0;
+  margin: 16px 0 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.palette-picker legend {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.palette-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+}
+.palette-option.chosen {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+.palette-option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.palette-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
 }
