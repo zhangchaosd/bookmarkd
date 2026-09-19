@@ -83,3 +83,14 @@ The downloaded Linux x86_64 artifact also ran directly on the local Fedora host.
 
 The design document is the acceptance baseline, not an assertion that every item
 in its full V1 hardware/operational matrix has been certified.
+
+## Compact library UI follow-up
+
+The library now uses name / tags / URL columns with a sticky table header.
+Browser inspection with 28 demo entries confirmed 32px default rows and 28px
+compact rows, including long titles, multiple tags and organize-mode controls.
+At a 1440×1000 viewport, 23 full rows are visible. Mobile prioritizes name and
+tags; organize mode allows horizontal scrolling. Copy/edit controls use inline
+SVG icons, and notes/folder metadata remain available through the title tooltip
+and editor. Frontend type checks/build and the existing end-to-end flow passed
+after the change. README screenshots were refreshed from the inspected UI.

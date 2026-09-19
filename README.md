@@ -10,6 +10,8 @@
 
 ![bookmarkd desktop interface](docs/images/desktop.png)
 
+紧凑三列浏览：名称（含图标）、标签、网址；默认行高 32px，紧凑模式 28px。截图使用演示数据。
+
 ## 功能
 
 - **仅 Passkey 登录**：极简登录页、可选 30 天绝对有效期；终端一次性令牌注册与恢复，无密码后门。

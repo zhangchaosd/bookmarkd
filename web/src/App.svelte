@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import RowIcon from './RowIcon.svelte';
   import { request, passkey, setCSRF, csrf, ApiError } from './api';
   type Bookmark = {
     id: string;
@@ -823,65 +824,132 @@
                 : '当前目录'}</span
           >
         </div>
-        <div class="bookmark-list">
-          {#each bookmarks as b (b.id)}<article class="bookmark">
-              {#if organize}<input
-                  aria-label={'选择 ' + b.title}
-                  type="checkbox"
-                  value={b.id}
-                  bind:group={selected}
-                />{/if}
-              <div class="site-icon" aria-hidden="true">
-                {b.title.slice(0, 1).toUpperCase()}
-              </div>
-              <div class="bookmark-content">
-                <a
-                  href={b.url_raw}
-                  target={preferences.new_tab ? '_blank' : '_self'}
-                  rel="noopener noreferrer"
-                  >{b.title}{#if b.pinned}<span class="pin" aria-label="已置顶">
-                      ★</span
-                    >{/if}</a
-                >
-                <p class="url">{b.url_raw}</p>
-                {#if b.notes}<p class="notes">{b.notes}</p>{/if}
-                <div class="tags">
-                  {#each b.tags as t}<button
-                      on:click={() => {
-                        tag = t;
-                        run(load);
-                      }}>{t}</button
-                    >{/each}{#if b.folder_id}<span class="folder-caption"
-                      >{folders.find((f) => f.id === b.folder_id)?.name ||
-                        '原目录已删除'}</span
-                    >{/if}
-                </div>
-              </div>
-              <div class="item-actions">
-                {#if view === 'trash'}<button
-                    on:click={() => run(() => change(b, 'restore'))}
-                    >恢复</button
-                  >{:else}<button
-                    title="复制网址"
-                    aria-label={'复制 ' + b.title}
-                    on:click={() =>
-                      run(async () => {
-                        await navigator.clipboard.writeText(b.url_raw);
-                        notice = '网址已复制';
-                      })}>复制</button
-                  ><button title="编辑收藏" on:click={() => edit(b)}
-                    >编辑</button
-                  >{#if organize}<button
-                      on:click={() => run(() => change(b, 'pin'))}
-                      >{b.pinned ? '取消置顶' : '置顶'}</button
-                    ><button on:click={() => run(() => moveUp(b))}>上移</button
-                    ><button
-                      class="danger"
-                      on:click={() => run(() => change(b, 'delete'))}
-                      >删除</button
-                    >{/if}{/if}
-              </div>
-            </article>{/each}
+        <div class="bookmark-list" class:organizing={organize}>
+          <table
+            class="bookmark-table"
+            aria-label={view === 'trash' ? '回收站收藏' : '收藏列表'}
+          >
+            <colgroup
+              ><col class="name-column" /><col class="tag-column" /><col
+                class="url-column"
+              /></colgroup
+            >
+            <thead
+              ><tr
+                ><th scope="col">名称</th><th scope="col">标签</th><th
+                  scope="col"
+                  class="url-cell">网址</th
+                ></tr
+              ></thead
+            >
+            <tbody>
+              {#each bookmarks as b (b.id)}
+                <tr class="bookmark" class:selected={selected.includes(b.id)}>
+                  <td>
+                    <div class="name-cell">
+                      {#if organize}<input
+                          aria-label={'选择 ' + b.title}
+                          type="checkbox"
+                          value={b.id}
+                          bind:group={selected}
+                        />{/if}
+                      <a
+                        class="bookmark-link"
+                        href={b.url_raw}
+                        target={preferences.new_tab ? '_blank' : '_self'}
+                        rel="noopener noreferrer"
+                        title={[
+                          b.title,
+                          b.folder_id
+                            ? folderPath(
+                                folders.find((f) => f.id === b.folder_id) || {
+                                  id: b.folder_id,
+                                  name: '原目录已删除',
+                                  parent_id: null,
+                                  version: 1,
+                                }
+                              )
+                            : '收件箱',
+                          b.notes,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      >
+                        <span class="site-icon" aria-hidden="true"
+                          >{b.title.slice(0, 1).toUpperCase()}</span
+                        >
+                        <span class="bookmark-title">{b.title}</span>
+                        {#if b.pinned}<span class="pin" aria-label="已置顶"
+                            >★</span
+                          >{/if}
+                      </a>
+                      <div class="item-actions">
+                        {#if view === 'trash'}
+                          <button
+                            title="恢复收藏"
+                            aria-label={'恢复 ' + b.title}
+                            on:click={() => run(() => change(b, 'restore'))}
+                            ><RowIcon name="restore" /></button
+                          >
+                        {:else}
+                          <button
+                            title="复制网址"
+                            aria-label={'复制 ' + b.title}
+                            on:click={() =>
+                              run(async () => {
+                                await navigator.clipboard.writeText(b.url_raw);
+                                notice = '网址已复制';
+                              })}><RowIcon name="copy" /></button
+                          >
+                          <button
+                            title="编辑收藏"
+                            aria-label={'编辑 ' + b.title}
+                            on:click={() => edit(b)}
+                            ><RowIcon name="edit" /></button
+                          >
+                          {#if organize}
+                            <button
+                              title={b.pinned ? '取消置顶' : '置顶'}
+                              aria-label={(b.pinned ? '取消置顶 ' : '置顶 ') +
+                                b.title}
+                              on:click={() => run(() => change(b, 'pin'))}
+                              ><RowIcon name="pin" filled={b.pinned} /></button
+                            >
+                            <button
+                              title="上移"
+                              aria-label={'上移 ' + b.title}
+                              on:click={() => run(() => moveUp(b))}
+                              ><RowIcon name="up" /></button
+                            >
+                            <button
+                              class="danger"
+                              title="移入回收站"
+                              aria-label={'删除 ' + b.title}
+                              on:click={() => run(() => change(b, 'delete'))}
+                              ><RowIcon name="trash" /></button
+                            >
+                          {/if}
+                        {/if}
+                      </div>
+                    </div>
+                  </td>
+                  <td
+                    ><div class="tags" title={b.tags.join('、')}>
+                      {#each b.tags as t}<button
+                          on:click={() => {
+                            tag = t;
+                            run(load);
+                          }}>{t}</button
+                        >{/each}
+                    </div></td
+                  >
+                  <td class="url-cell"
+                    ><span class="url" title={b.url_raw}>{b.url_raw}</span></td
+                  >
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
         {#if bookmarks.length === 0}<div class="empty">
             <span>◇</span>

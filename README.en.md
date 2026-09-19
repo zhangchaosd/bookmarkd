@@ -10,6 +10,8 @@ Your bookmarks, independent of your browser. A self-hosted, single-user web app 
 
 ![bookmarkd desktop interface](docs/images/desktop.png)
 
+Compact three-column browsing: name with icon, tags, and URL. Rows are 32px by default or 28px in compact mode. Screenshots show demo data.
+
 ## Features
 
 - **Passkey-only authentication:** one login button, optional absolute 30-day sessions, terminal-authorized setup and recovery; no password fallback.
