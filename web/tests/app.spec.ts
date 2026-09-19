@@ -311,6 +311,15 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   ).toBeChecked();
   await expect(page.getByLabel('明暗模式')).toHaveValue('dark');
   await page.getByLabel('明暗模式').selectOption('system');
+  // A background refresh must preserve unsaved appearance choices.
+  const refreshedPreferences = page.waitForResponse(
+    (r) =>
+      r.url().endsWith('/api/v1/preferences') && r.request().method() === 'GET'
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await refreshedPreferences;
+  await expect(page.getByLabel('明暗模式')).toBeEnabled();
+  await expect(page.getByLabel('明暗模式')).toHaveValue('system');
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'light');
   await page.emulateMedia({ colorScheme: 'dark' });

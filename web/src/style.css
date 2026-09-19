@@ -824,3 +824,10 @@ nav .folder-nav {
   height: 12px;
   border-radius: 50%;
 }
+
+.preferences-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}

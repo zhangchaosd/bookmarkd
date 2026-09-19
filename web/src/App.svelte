@@ -82,6 +82,7 @@
     { id: 'amber', name: '暖琥珀', color: '#956014' },
     { id: 'slate', name: '石墨灰', color: '#526175' },
   ];
+  let preferencesDirty = false;
   let batchFolder = '',
     batchTags = '',
     sessionId = '',
@@ -124,6 +125,7 @@
   }
   function clearPrivate() {
     resetDrag();
+    preferencesDirty = false;
     authenticated = false;
     bookmarks = [];
     folders = [];
@@ -152,11 +154,15 @@
       trashedFolders = t.folders;
       total = bookmarks.length;
     } else if (view === 'settings') {
-      [sessions, credentials, preferences] = await Promise.all([
-        request('/api/v1/auth/sessions'),
-        request('/api/v1/auth/credentials'),
-        request('/api/v1/preferences'),
-      ]);
+      const [loadedSessions, loadedCredentials, loadedPreferences] =
+        await Promise.all([
+          request('/api/v1/auth/sessions'),
+          request('/api/v1/auth/credentials'),
+          request('/api/v1/preferences'),
+        ]);
+      sessions = loadedSessions;
+      credentials = loadedCredentials;
+      if (!preferencesDirty) preferences = loadedPreferences;
     } else {
       const params = new URLSearchParams({
         q: query,
@@ -608,6 +614,7 @@
   }
   async function savePrefs() {
     preferences = await request('/api/v1/preferences', 'PATCH', preferences);
+    preferencesDirty = false;
     notice = '偏好已保存';
   }
   onMount(() => {
@@ -621,7 +628,8 @@
       await check();
       capture();
       if (authenticated) {
-        preferences = await request('/api/v1/preferences');
+        const loadedPreferences = await request('/api/v1/preferences');
+        if (!preferencesDirty) preferences = loadedPreferences;
         await load();
       }
     });
@@ -792,47 +800,53 @@
       {#if view === 'settings'}<div class="settings-grid">
           <section class="panel">
             <h2>浏览偏好</h2>
-            <label
-              >明暗模式<select bind:value={preferences.theme}
-                ><option value="system">跟随系统</option><option value="light"
-                  >浅色</option
-                ><option value="dark">深色</option></select
-              ></label
+            <fieldset
+              class="preferences-fields"
+              disabled={busy}
+              on:change={() => (preferencesDirty = true)}
             >
-            <fieldset class="palette-picker">
-              <legend>配色主题</legend>
-              {#each palettes as palette}
-                <label
-                  class="palette-option"
-                  class:chosen={(preferences.palette || 'forest') ===
-                    palette.id}
-                >
-                  <input
-                    type="radio"
-                    name="palette"
-                    value={palette.id}
-                    checked={(preferences.palette || 'forest') === palette.id}
-                    on:change={() => (preferences.palette = palette.id)}
-                  />
-                  <span
-                    class="palette-swatch"
-                    style:background={palette.color}
-                    aria-hidden="true"
-                  ></span>
-                  {palette.name}
-                </label>
-              {/each}
+              <label
+                >明暗模式<select bind:value={preferences.theme}
+                  ><option value="system">跟随系统</option><option value="light"
+                    >浅色</option
+                  ><option value="dark">深色</option></select
+                ></label
+              >
+              <fieldset class="palette-picker">
+                <legend>配色主题</legend>
+                {#each palettes as palette}
+                  <label
+                    class="palette-option"
+                    class:chosen={(preferences.palette || 'forest') ===
+                      palette.id}
+                  >
+                    <input
+                      type="radio"
+                      name="palette"
+                      value={palette.id}
+                      checked={(preferences.palette || 'forest') === palette.id}
+                      on:change={() => (preferences.palette = palette.id)}
+                    />
+                    <span
+                      class="palette-swatch"
+                      style:background={palette.color}
+                      aria-hidden="true"
+                    ></span>
+                    {palette.name}
+                  </label>
+                {/each}
+              </fieldset>
+              <p class="muted">选择后立即预览，点击「保存偏好」保留设置。</p>
+              <label
+                >显示密度<select bind:value={preferences.density}
+                  ><option value="comfortable">舒适</option><option
+                    value="compact">紧凑</option
+                  ></select
+                ></label
+              ><label class="inline"
+                ><input type="checkbox" bind:checked={preferences.new_tab} /> 新标签页打开链接</label
+              ><button on:click={() => run(savePrefs)}>保存偏好</button>
             </fieldset>
-            <p class="muted">选择后立即预览，点击「保存偏好」保留设置。</p>
-            <label
-              >显示密度<select bind:value={preferences.density}
-                ><option value="comfortable">舒适</option><option
-                  value="compact">紧凑</option
-                ></select
-              ></label
-            ><label class="inline"
-              ><input type="checkbox" bind:checked={preferences.new_tab} /> 新标签页打开链接</label
-            ><button on:click={() => run(savePrefs)}>保存偏好</button>
           </section>
           <section class="panel">
             <h2>文件夹管理</h2>
