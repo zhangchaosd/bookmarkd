@@ -394,7 +394,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
     await cdp.send('WebAuthn.getCredentials', { authenticatorId })
   ).credentials[0];
   expect(Buffer.from(credential.userHandle, 'base64').length).toBe(32);
-  cli('auth', 'revoke', cli('auth', 'list').split('\t')[0]);
+  cli('auth', 'revoke', '--', cli('auth', 'list').split('\t')[0]);
   await page.goto('http://localhost:8766/library');
   await expect(
     page.getByRole('button', { name: '使用 Passkey 登录', exact: true })
