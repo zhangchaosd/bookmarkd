@@ -1,6 +1,6 @@
 # bookmarkd · 私人收藏中心
 
-[English](README.en.md) · [设计文档](private_bookmark_hub_project_design.md) · [部署与恢复](docs/OPERATIONS.md) · [认证模块](docs/AUTH.md) · [验证报告](docs/TESTING.md)
+[English](README.en.md) · [设计文档](private_bookmark_hub_project_design.md) · [systemd 生产部署](docs/DEPLOY_SYSTEMD.zh-CN.md) · [部署与恢复](docs/OPERATIONS.md) · [认证模块](docs/AUTH.md) · [验证报告](docs/TESTING.md)
 
 [![CI](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml)
 [![Release](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml)

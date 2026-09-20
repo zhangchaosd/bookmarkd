@@ -1,8 +1,13 @@
 # Deployment, recovery and upgrades / 部署与恢复
 
+For a complete Linux deployment with systemd, a separate Caddy gateway, scheduled
+backups and upgrades, see [systemd 生产部署指南（中文）](DEPLOY_SYSTEMD.zh-CN.md).
+
 Use a dedicated OS account and a private local directory. `init` creates mode 0700
 on Unix. On Windows, place data under an account-private directory and configure
-its NTFS ACL. The application serves plain HTTP on loopback behind an HTTPS proxy;
+its NTFS ACL. The application serves plain HTTP behind an HTTPS proxy. Use loopback for a
+local proxy, or `serve --listen 0.0.0.0:8765` with access restricted to the gateway
+for a separate LAN proxy;
 the configured public URL must remain the browser's exact origin, without a trailing
 slash. Preserve the original Host header. No proxy-supplied identity is trusted.
 
@@ -38,7 +43,7 @@ Configuration paths are relative to the config file. `BOOKMARKD_CONFIG`,
 corresponding file values. `serve --listen` / `--setup-mode` take precedence over
 environment values. Identity/name/storage settings are explicit TOML fields;
 `init --help` lists initialization overrides. Unknown schema versions fail closed.
-Version 0.1 has schema 1; `auth migrate` validates that version and does not perform
+Version 0.2.1 has schema 1; `auth migrate` validates that version and does not perform
 speculative or destructive migration of unknown schemas.
 
 ## Lost Passkey / 丢失 Passkey
