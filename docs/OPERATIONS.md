@@ -1,8 +1,10 @@
 # Deployment, recovery and upgrades / 部署与恢复
 
-For a complete Linux deployment with systemd, a separate Caddy gateway, scheduled
-backups and upgrades, see [systemd 生产部署指南（中文）](DEPLOY_SYSTEMD.zh-CN.md).
+For a lightweight deployment under your current user's `~/bookmarkd`, with user
+systemd and a separate Caddy gateway, see [轻量部署指南（中文）](DEPLOY_SYSTEMD.zh-CN.md).
+It keeps the application files together and does not require a dedicated account.
 
+The dedicated-account layout below is an alternative for centrally managed hosts.
 Use a dedicated OS account and a private local directory. `init` creates mode 0700
 on Unix. On Windows, place data under an account-private directory and configure
 its NTFS ACL. The application serves plain HTTP behind an HTTPS proxy. Use loopback for a

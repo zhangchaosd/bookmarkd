@@ -1,6 +1,6 @@
 # bookmarkd · Private bookmark hub
 
-[简体中文](README.md) · [Design](private_bookmark_hub_project_design.md) · [systemd deployment (中文)](docs/DEPLOY_SYSTEMD.zh-CN.md) · [Operations](docs/OPERATIONS.md) · [Authentication](docs/AUTH.md) · [Validation report](docs/TESTING.md)
+[简体中文](README.md) · [Design](private_bookmark_hub_project_design.md) · [Lightweight systemd deployment (中文)](docs/DEPLOY_SYSTEMD.zh-CN.md) · [Operations](docs/OPERATIONS.md) · [Authentication](docs/AUTH.md) · [Validation report](docs/TESTING.md)
 
 [![CI](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml)
 [![Release](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml)

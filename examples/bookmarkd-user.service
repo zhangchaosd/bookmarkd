@@ -1,0 +1,15 @@
+[Unit]
+Description=bookmarkd
+
+[Service]
+Type=simple
+WorkingDirectory=%h/bookmarkd
+ExecStart=%h/bookmarkd/bookmarkd --config %h/bookmarkd/data/config.toml serve --listen 0.0.0.0:8765
+Restart=on-failure
+RestartSec=5
+UMask=0077
+StandardOutput=append:%h/bookmarkd/bookmarkd.log
+StandardError=append:%h/bookmarkd/bookmarkd.log
+
+[Install]
+WantedBy=default.target
