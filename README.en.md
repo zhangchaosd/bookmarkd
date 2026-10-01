@@ -10,7 +10,7 @@ Your bookmarks, independent of your browser. A self-hosted, single-user web app 
 
 ![bookmarkd desktop interface](docs/images/desktop.png)
 
-Compact three-column browsing: name with icon, tags, and URL. Rows are 32px by default or 28px in compact mode. Screenshots show demo data.
+Compact table browsing: name, folder, tags, and site domain. Rows are 32px by default or 28px in compact mode; phones switch to a card layout. Screenshots show demo data.
 
 ## Features
 
@@ -21,7 +21,9 @@ Compact three-column browsing: name with icon, tags, and URL. Rows are 32px by d
 - **Migration and operations:** HTML/JSON import preview, exports, capture bookmarklet, SQLite online backups and offline restores.
 - **Reusable authentication:** embedded Rust crate with shared local authoritative credentials and separate host-scoped sessions; no SSO.
 
-On desktop, drag a bookmark's left handle to another row's upper/lower edge to reorder, onto a sidebar folder to move it inside, or onto Inbox to move it out. Folders can also be dragged: the center nests them, the edges reorder siblings, and “移至根目录” moves them to the root. Changes save automatically. Clear search/tag filters before reordering; moving into folders remains available while filtered. On touch devices, use editing and batch moves.
+Manage folders directly in the sidebar: select ＋ next to “文件夹” to create one; hover a folder and select ⋯, or right-click it, to add a subfolder, rename, or delete. Deleting asks whether to keep its bookmarks (moved to Inbox) or move them to trash as well. Folders with children can be collapsed. Press `/` to focus search.
+
+On desktop, drag a bookmark's left handle to another row's upper/lower edge to reorder, onto a sidebar folder to move it inside, or onto Inbox to move it out. Folders can also be dragged: the center nests them, the edges reorder siblings, and dropping on the “文件夹” heading (shown as “移至根目录” while dragging) moves them to the root. Changes save automatically. Clear search/tag filters before reordering; moving into folders remains available while filtered. On touch devices, use editing and batch moves.
 
 Choose Forest, Ocean, Iris, Amber, or Graphite under Settings → Browsing preferences. Each palette supports light, dark, and system appearance. Preview immediately, then select Save preferences to persist the choice.
 

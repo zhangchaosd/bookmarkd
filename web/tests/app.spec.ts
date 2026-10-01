@@ -85,14 +85,14 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await page
     .getByRole('button', { name: '使用 Passkey 登录', exact: true })
     .click();
-  await expect(page.getByRole('button', { name: '＋ 添加收藏' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '添加收藏' })).toBeVisible();
   const cookies = await context.cookies();
   const session = cookies.find((c) => c.name === 'bookmarkd_session')!;
   expect(session.httpOnly).toBe(true);
   expect(session.sameSite).toBe('Strict');
   expect(session.expires).toBe(-1);
   expect((await context.request.get('/setup')).status()).toBe(404);
-  await page.getByRole('button', { name: '＋ 添加收藏' }).click();
+  await page.getByRole('button', { name: '添加收藏' }).click();
   await page
     .getByLabel('网址', { exact: false })
     .fill('https://example.com/?a=1&b=2');
@@ -227,6 +227,12 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
       to.y + to.height * y,
       { steps: 10 }
     );
+    // Chromium may skip dragover on the step that enters a new element; a
+    // small move inside the target, as a real hand makes, delivers one.
+    await page.mouse.move(
+      to.x + Math.min(to.width / 2, 60) + 1,
+      to.y + to.height * y + 1
+    );
     await expect(target).toHaveAttribute('data-drop', /before|after|inside/);
     const response = page.waitForResponse(
       (r) => r.url().endsWith('/move') && r.request().method() === 'POST'
@@ -262,7 +268,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await expect(row('中文学习 Rust')).toBeVisible();
   await drag(
     row('中文学习 Rust').locator('.drag-handle'),
-    page.getByRole('button', { name: '▣ 收件箱', exact: true })
+    page.getByRole('button', { name: '收件箱', exact: true })
   );
   await expect(row('中文学习 Rust')).toHaveCount(0);
   expect((await api('/api/v1/bookmarks/' + b.id)).value.folder_id).toBeNull();
@@ -273,7 +279,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   ).toBe(f.id);
   await drag(
     folderButton('工具'),
-    page.getByRole('button', { name: '↑ 移至根目录', exact: true })
+    page.getByRole('button', { name: '移至根目录', exact: true })
   );
   expect(
     (await api('/api/v1/folders')).value.find((x: any) => x.id === sibling.id)
@@ -284,12 +290,12 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   expect(
     folderList.find((x: any) => x.id === sibling.id).position
   ).toBeLessThan(folderList.find((x: any) => x.id === f.id).position);
-  await page.getByRole('button', { name: '▦ 全部收藏', exact: true }).click();
+  await page.getByRole('button', { name: '全部收藏', exact: true }).click();
   await expect(row('中文学习 Rust')).toBeVisible();
   await page.reload();
   await expect(row('中文学习 Rust')).toBeVisible();
   // Palette preview, independent dark mode, and server-backed persistence.
-  await page.getByRole('button', { name: '⚙ 设置与迁移', exact: true }).click();
+  await page.getByRole('button', { name: '设置与迁移', exact: true }).click();
   for (const [id, name] of [
     ['forest', '森林绿'],
     ['ocean', '海洋蓝'],
@@ -328,7 +334,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await page.emulateMedia({ colorScheme: 'light' });
   await page.getByRole('button', { name: '保存偏好', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('偏好已保存');
-  await page.getByRole('button', { name: '▦ 全部收藏', exact: true }).click();
+  await page.getByRole('button', { name: '全部收藏', exact: true }).click();
   const exported = (
     await api('/api/v1/exports', 'POST', {
       format: 'json',
@@ -379,7 +385,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await page
     .getByRole('button', { name: '使用 Passkey 登录', exact: true })
     .click();
-  await expect(page.getByRole('button', { name: '＋ 添加收藏' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '添加收藏' })).toBeVisible();
   const long = (await context.cookies()).find(
     (c) => c.name === 'second_session'
   )!;

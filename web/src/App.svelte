@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import RowIcon from './RowIcon.svelte';
+  import Icon from './Icon.svelte';
   import { request, passkey, setCSRF, csrf, ApiError } from './api';
   type Bookmark = {
     id: string;
@@ -83,6 +83,58 @@
     { id: 'slate', name: '石墨灰', color: '#526175' },
   ];
   let preferencesDirty = false;
+  type FolderDraft = {
+    mode: 'create' | 'rename';
+    parent: string | null;
+    id?: string;
+    version?: number;
+    name: string;
+  };
+  let folderDraft: FolderDraft | null = null,
+    folderMenu: { id: string; x: number; y: number } | null = null,
+    deleting: Folder | null = null,
+    deleteStrategy = 'move',
+    collapsed: string[] = readCollapsed(),
+    // Stored with folder ids so the whole folder section remembers its state too.
+    SECTION = '*folders',
+    searchInput: HTMLInputElement,
+    dropActive = false;
+  // Collapsed folders are a per-device convenience, so a failing store is ignored.
+  function readCollapsed(): string[] {
+    try {
+      return JSON.parse(localStorage.getItem('bookmarkd-collapsed') || '[]');
+    } catch {
+      return [];
+    }
+  }
+  function toggleCollapsed(id: string) {
+    collapsed = collapsed.includes(id)
+      ? collapsed.filter((x) => x !== id)
+      : [...collapsed, id];
+    try {
+      localStorage.setItem('bookmarkd-collapsed', JSON.stringify(collapsed));
+    } catch {
+      /* Storage may be unavailable in private windows. */
+    }
+  }
+  function hostname(raw: string): string {
+    try {
+      return new URL(raw).hostname.replace(/^www\./, '') || raw;
+    } catch {
+      return raw;
+    }
+  }
+  // A stable hue per site keeps letter tiles distinguishable without loading remote favicons.
+  function siteHue(raw: string): number {
+    let h = 0;
+    for (const c of hostname(raw)) h = (h * 31 + c.charCodeAt(0)) % 360;
+    return h;
+  }
+  function folderLabel(id: string | null): string {
+    if (!id) return '收件箱';
+    const f = folders.find((x) => x.id === id);
+    return f ? folderPath(f) : '原目录已删除';
+  }
   let batchFolder = '',
     batchTags = '',
     sessionId = '',
@@ -92,10 +144,11 @@
   $: document.documentElement.dataset.palette = preferences.palette || 'forest';
   $: document.documentElement.dataset.density = preferences.density;
   $: bookmarklet = `javascript:(()=>{const u=new URL('/capture',${JSON.stringify(location.origin)});u.searchParams.set('url',location.href);u.searchParams.set('title',document.title);window.open(u,'_blank','noopener,noreferrer')})()`;
-  function focusDialog(node: HTMLDialogElement) {
+  function modal(node: HTMLDialogElement, onClose: () => void) {
     node.showModal();
-    const close = () => {
-      showEditor = false;
+    const close = (event: Event) => {
+      event.preventDefault();
+      onClose();
     };
     node.addEventListener('cancel', close);
     return {
@@ -145,11 +198,17 @@
     } else clearPrivate();
     ready = true;
   }
+  let loadSeq = 0;
   async function load() {
     if (!authenticated) return;
-    folders = await request('/api/v1/folders');
+    // Quick navigation can overlap loads; only the newest one may update the view.
+    const seq = ++loadSeq;
+    const loadedFolders = await request('/api/v1/folders');
+    if (seq !== loadSeq) return;
+    folders = loadedFolders;
     if (view === 'trash') {
       const t = await request('/api/v1/trash');
+      if (seq !== loadSeq) return;
       bookmarks = t.bookmarks;
       trashedFolders = t.folders;
       total = bookmarks.length;
@@ -174,6 +233,7 @@
       if (folder === 'pinned') params.set('pinned', 'true');
       if (tag) params.set('tag', tag);
       const r = await request('/api/v1/bookmarks?' + params);
+      if (seq !== loadSeq) return;
       bookmarks = r.items;
       total = r.total;
       revision = r.revision;
@@ -329,18 +389,30 @@
     | { kind: 'pinned' };
   let dragged: DragItem | null = null;
   let dropHint = '';
-  $: folderRows = flattenFolders(folders);
+  $: folderRows = flattenFolders(folders, collapsed);
+  $: showFolderColumn =
+    view === 'trash' ||
+    folder === 'all' ||
+    folder === 'pinned' ||
+    !!query.trim() ||
+    !!tag;
   function flattenFolders(
     items: Folder[],
+    hidden: string[],
     parent: string | null = null,
     depth = 0
-  ): { folder: Folder; depth: number }[] {
+  ): { folder: Folder; depth: number; children: boolean }[] {
     return items
       .filter((f) => f.parent_id === parent)
-      .flatMap((f) => [
-        { folder: f, depth },
-        ...flattenFolders(items, f.id, depth + 1),
-      ]);
+      .flatMap((f) => {
+        const children = items.some((x) => x.parent_id === f.id);
+        return [
+          { folder: f, depth, children },
+          ...(hidden.includes(f.id)
+            ? []
+            : flattenFolders(items, hidden, f.id, depth + 1)),
+        ];
+      });
   }
   function resetDrag() {
     dragged = null;
@@ -551,13 +623,47 @@
     folderName = folderEdit = folderParent = '';
     await load();
   }
+  function descendants(id: string): number {
+    const children = folders.filter((f) => f.parent_id === id);
+    return children.reduce((n, f) => n + 1 + descendants(f.id), 0);
+  }
+  function startFolderDraft(draft: FolderDraft) {
+    folderMenu = null;
+    if (draft.parent && collapsed.includes(draft.parent))
+      toggleCollapsed(draft.parent);
+    folderDraft = draft;
+  }
+  async function commitFolderDraft() {
+    const draft = folderDraft;
+    // Clear first so the blur that follows Enter cannot submit twice.
+    folderDraft = null;
+    const name = draft?.name.trim();
+    if (!draft || !name) return;
+    if (draft.mode === 'rename') {
+      const f = folders.find((x) => x.id === draft.id);
+      if (!f || f.name === name) return;
+    }
+    await request(
+      '/api/v1/folders' + (draft.mode === 'rename' ? '/' + draft.id : ''),
+      draft.mode === 'rename' ? 'PATCH' : 'POST',
+      { name, parent_id: draft.parent, version: draft.version || 0 }
+    );
+    notice = draft.mode === 'rename' ? '文件夹已重命名' : '文件夹已创建';
+    await load();
+  }
+  function autofocus(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+  function openFolderMenu(id: string, x: number, y: number) {
+    folderMenu = {
+      id,
+      x: Math.min(x, innerWidth - 200),
+      y: Math.min(y, innerHeight - 170),
+    };
+  }
   async function deleteFolder(f: Folder, strategy: string) {
-    if (
-      !confirm(
-        `删除目录“${f.name}”及其子目录？${strategy === 'trash' ? '内容移入回收站。' : '内容移至收件箱。'}`
-      )
-    )
-      return;
+    deleting = null;
     await request('/api/v1/folders/' + f.id, 'DELETE', {
       version: f.version,
       strategy,
@@ -566,8 +672,7 @@
     folder = 'all';
     await load();
   }
-  async function importFile(e: Event) {
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+  async function importFile(file: File | undefined) {
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) throw new Error('文件不得超过 20 MiB');
     importFormat = file.name.toLowerCase().endsWith('.json') ? 'json' : 'html';
@@ -647,11 +752,32 @@
     const pageshow = () => {
       if (!ready) focus();
     };
+    const keydown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        event.key === '/' &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !target.closest('input,textarea,select,[contenteditable]') &&
+        searchInput
+      ) {
+        event.preventDefault();
+        searchInput.focus();
+      } else if (event.key === 'Escape') folderMenu = null;
+    };
+    const closeMenu = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('.folder-menu,.folder-more'))
+        folderMenu = null;
+    };
+    window.addEventListener('keydown', keydown);
+    window.addEventListener('mousedown', closeMenu);
     window.addEventListener('focus', focus);
     window.addEventListener('pagehide', pagehide);
     window.addEventListener('pageshow', pageshow);
     return () => {
       channel?.close();
+      window.removeEventListener('keydown', keydown);
+      window.removeEventListener('mousedown', closeMenu);
       window.removeEventListener('focus', focus);
       window.removeEventListener('pagehide', pagehide);
       window.removeEventListener('pageshow', pageshow);
@@ -695,8 +821,7 @@
 {:else if !authenticated}
   <main class="auth">
     <div class="brandmark" aria-hidden="true">◆</div>
-    <h1>私人收藏中心</h1>
-    <p class="muted">好内容，随时找得到。</p>
+    <h1>收藏中心</h1>
     <button class="primary login" disabled={busy} on:click={() => run(login)}
       >{busy ? '等待 Passkey 验证…' : '使用 Passkey 登录'}</button
     ><label class="remember"
@@ -706,74 +831,218 @@
   </main>
 {:else}
   <div class="shell">
+    {#if mobileNav}<button
+        class="scrim"
+        aria-label="关闭导航"
+        on:click={() => (mobileNav = false)}
+      ></button>{/if}
     <aside class:open={mobileNav}>
-      <a class="brand" href="/"
-        >◆ <strong>收藏中心</strong><small>BOOKMARKD</small></a
-      >
+      <a class="brand" href="/">◆ <strong>收藏中心</strong></a>
       <nav aria-label="收藏导航">
         <button
           class:active={view === 'library' && folder === 'all'}
-          on:click={() => nav('library')}>▦ 全部收藏</button
+          on:click={() => nav('library')}
+          ><Icon name="library" size={16} /> 全部收藏</button
         ><button
           use:dropTarget={{ kind: 'pinned' }}
           class:active={view === 'library' && folder === 'pinned'}
-          on:click={() => nav('library', 'pinned')}>☆ 常用置顶</button
+          on:click={() => nav('library', 'pinned')}
+          ><Icon name="pin" size={16} /> 常用置顶</button
         ><button
           use:dropTarget={{ kind: 'root' }}
           class:drop-ready={!!dragged}
-          title="拖到这里，将收藏移出目录；目录本身会移到根目录"
+          title="未归入文件夹的收藏；拖到这里可将收藏移出文件夹"
           class:active={view === 'library' && folder === ''}
-          on:click={() => nav('library', '')}>▣ 收件箱</button
-        >
-        <button
-          class="root-drop"
-          class:drop-ready={!!dragged}
-          use:dropTarget={{ kind: 'root' }}
           on:click={() => nav('library', '')}
-          >{dragged?.kind === 'folders'
-            ? '↑ 移至根目录'
-            : dragged
-              ? '↑ 移出目录 → 收件箱'
-              : '文件夹 · 根目录'}</button
+          ><Icon name="inbox" size={16} /> 收件箱</button
         >
-        {#each folderRows as row (row.folder.id)}<button
-            class="folder-nav"
-            style:padding-left={`${14 + row.depth * 12}px`}
-            use:dragSource={{
-              kind: 'folders',
-              id: row.folder.id,
-              version: row.folder.version,
-              title: row.folder.name,
+        <div class="nav-section">
+          <button
+            class="root-drop"
+            class:drop-ready={dragged?.kind === 'folders'}
+            use:dropTarget={{ kind: 'root' }}
+            aria-expanded={!collapsed.includes(SECTION)}
+            on:click={() => toggleCollapsed(SECTION)}
+            >{#if dragged?.kind === 'folders'}<Icon name="up" /> 移至根目录{:else}<span
+                class="twisty"
+                class:open={!collapsed.includes(SECTION)}
+                ><Icon name="chevron" size={12} /></span
+              > 文件夹{/if}</button
+          ><button
+            class="icon-button"
+            title="新建文件夹"
+            aria-label="新建文件夹"
+            on:click={() => {
+              if (collapsed.includes(SECTION)) toggleCollapsed(SECTION);
+              startFolderDraft({ mode: 'create', parent: null, name: '' });
+            }}><Icon name="plus" /></button
+          >
+        </div>
+        {#if folderDraft?.mode === 'create' && !folderDraft.parent}
+          <input
+            class="folder-input"
+            aria-label="新文件夹名称"
+            placeholder="文件夹名称，回车创建"
+            maxlength="128"
+            bind:value={folderDraft.name}
+            use:autofocus
+            on:keydown={(e) => {
+              if (e.key === 'Enter') run(commitFolderDraft);
+              if (e.key === 'Escape') folderDraft = null;
             }}
-            use:dropTarget={{ kind: 'folder', id: row.folder.id }}
-            class:active={folder === row.folder.id}
-            title={folderPath(row.folder) + '（可拖动排序或移动目录）'}
-            on:click={() => nav('library', row.folder.id)}
-            >▱ {row.folder.name}</button
-          >{/each}
-        <div class="nav-label">管理</div>
+            on:blur={() => run(commitFolderDraft)}
+          />
+        {/if}
+        {#each collapsed.includes(SECTION) ? [] : folderRows as row (row.folder.id)}
+          <div
+            class="folder-row"
+            class:active={view === 'library' && folder === row.folder.id}
+            style:--depth={row.depth}
+          >
+            {#if row.children}<button
+                class="twisty"
+                class:open={!collapsed.includes(row.folder.id)}
+                aria-label={(collapsed.includes(row.folder.id)
+                  ? '展开 '
+                  : '折叠 ') + row.folder.name}
+                aria-expanded={!collapsed.includes(row.folder.id)}
+                on:click={() => toggleCollapsed(row.folder.id)}
+                ><Icon name="chevron" size={12} /></button
+              >{:else}<span class="twisty"></span>{/if}
+            {#if folderDraft?.mode === 'rename' && folderDraft.id === row.folder.id}
+              <input
+                class="folder-input"
+                aria-label="重命名文件夹"
+                maxlength="128"
+                bind:value={folderDraft.name}
+                use:autofocus
+                on:keydown={(e) => {
+                  if (e.key === 'Enter') run(commitFolderDraft);
+                  if (e.key === 'Escape') folderDraft = null;
+                }}
+                on:blur={() => run(commitFolderDraft)}
+              />
+            {:else}
+              <button
+                class="folder-nav"
+                use:dragSource={{
+                  kind: 'folders',
+                  id: row.folder.id,
+                  version: row.folder.version,
+                  title: row.folder.name,
+                }}
+                use:dropTarget={{ kind: 'folder', id: row.folder.id }}
+                class:active={view === 'library' && folder === row.folder.id}
+                title={folderPath(row.folder)}
+                on:click={() => nav('library', row.folder.id)}
+                on:contextmenu|preventDefault={(e) =>
+                  openFolderMenu(row.folder.id, e.clientX, e.clientY)}
+                ><Icon
+                  name="folder"
+                  size={16}
+                  filled={view === 'library' && folder === row.folder.id}
+                /><span>{row.folder.name}</span></button
+              ><button
+                class="folder-more icon-button"
+                title="更多操作"
+                aria-label={'更多操作：' + row.folder.name}
+                aria-haspopup="menu"
+                on:click={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  if (folderMenu?.id === row.folder.id) folderMenu = null;
+                  else openFolderMenu(row.folder.id, r.left, r.bottom + 4);
+                }}><Icon name="more" /></button
+              >
+            {/if}
+          </div>
+          {#if folderDraft?.mode === 'create' && folderDraft.parent === row.folder.id}
+            <div class="folder-row" style:--depth={row.depth + 1}>
+              <span class="twisty"></span><input
+                class="folder-input"
+                aria-label="新子文件夹名称"
+                placeholder="子文件夹名称，回车创建"
+                maxlength="128"
+                bind:value={folderDraft.name}
+                use:autofocus
+                on:keydown={(e) => {
+                  if (e.key === 'Enter') run(commitFolderDraft);
+                  if (e.key === 'Escape') folderDraft = null;
+                }}
+                on:blur={() => run(commitFolderDraft)}
+              />
+            </div>
+          {/if}
+        {:else}
+          {#if !folderDraft && !folders.length}<p class="nav-empty">
+              还没有文件夹，点击 ＋ 新建
+            </p>{/if}
+        {/each}
+        <div class="nav-section"><span>管理</span></div>
         <button class:active={view === 'trash'} on:click={() => nav('trash')}
-          >♲ 回收站</button
+          ><Icon name="trash" size={16} /> 回收站</button
         ><button
           class:active={view === 'settings'}
-          on:click={() => nav('settings')}>⚙ 设置与迁移</button
+          on:click={() => nav('settings')}
+          ><Icon name="settings" size={16} /> 设置与迁移</button
         >
       </nav>
       <div class="aside-footer">
-        <span class="status-dot"></span> 私有 · 自托管<button
-          on:click={() => run(logout)}>退出登录</button
+        <button on:click={() => run(logout)}
+          ><Icon name="logout" /> 退出登录</button
         >
       </div>
     </aside>
+    {#if folderMenu}
+      {@const menuFolder = folders.find((f) => f.id === folderMenu?.id)}
+      {#if menuFolder}<div
+          class="folder-menu"
+          role="menu"
+          style:left={folderMenu.x + 'px'}
+          style:top={folderMenu.y + 'px'}
+        >
+          <button
+            role="menuitem"
+            on:click={() =>
+              startFolderDraft({
+                mode: 'create',
+                parent: menuFolder.id,
+                name: '',
+              })}><Icon name="plus" /> 新建子文件夹</button
+          ><button
+            role="menuitem"
+            on:click={() =>
+              startFolderDraft({
+                mode: 'rename',
+                parent: menuFolder.parent_id,
+                id: menuFolder.id,
+                version: menuFolder.version,
+                name: menuFolder.name,
+              })}><Icon name="edit" /> 重命名</button
+          ><button
+            role="menuitem"
+            class="danger"
+            on:click={() => {
+              // Read the folder before clearing the menu it is derived from.
+              deleting = menuFolder;
+              deleteStrategy = 'move';
+              folderMenu = null;
+            }}><Icon name="trash" /> 删除…</button
+          >
+        </div>{/if}
+    {/if}
     <main class="workspace">
       <header>
         <button
           class="mobile-toggle"
           aria-label="打开导航"
-          on:click={() => (mobileNav = !mobileNav)}>☰</button
+          on:click={() => (mobileNav = !mobileNav)}
+          ><Icon name="menu" size={18} /></button
         >
         <div>
-          <p class="eyebrow">YOUR PERSONAL LIBRARY</p>
+          {#if view === 'library' && folder && folder !== 'all' && folder !== 'pinned'}
+            {@const parent = folders.find((f) => f.id === folder)?.parent_id}
+            {#if parent}<p class="eyebrow">{folderLabel(parent)} /</p>{/if}
+          {/if}
           <h1>
             {view === 'trash'
               ? '回收站'
@@ -786,8 +1055,9 @@
                     : folders.find((f) => f.id === folder)?.name || '全部收藏'}
           </h1>
         </div>
-        {#if view === 'library'}<button class="primary" on:click={() => edit()}
-            >＋ 添加收藏</button
+        {#if view === 'library'}<button
+            class="primary add-button"
+            on:click={() => edit()}><Icon name="plus" /> 添加收藏</button
           >{/if}
       </header>
       {#if error}<div class="banner error" role="alert">
@@ -850,6 +1120,10 @@
           </section>
           <section class="panel">
             <h2>文件夹管理</h2>
+            <p class="muted">
+              也可以在左侧栏点击「文件夹」旁的 ＋
+              新建，或右键文件夹重命名、删除。
+            </p>
             <form on:submit|preventDefault={() => run(saveFolder)}>
               <label
                 >名称<input
@@ -873,20 +1147,23 @@
                   }}>取消</button
                 >{/if}
             </form>
-            {#each folders as f}<div class="setting-row">
-                <span>{folderPath(f)}</span><button
+            {#each folderRows as row (row.folder.id)}{@const f = row.folder}
+              <div class="setting-row">
+                <span class="with-icon"
+                  ><Icon name="folder" /> {folderPath(f)}</span
+                ><button
                   on:click={() => {
                     folderEdit = f.id;
                     folderName = f.name;
                     folderParent = f.parent_id || '';
                     folderVersion = f.version;
                   }}>编辑</button
-                ><button on:click={() => run(() => deleteFolder(f, 'move'))}
-                  >移至收件箱</button
                 ><button
                   class="danger"
-                  on:click={() => run(() => deleteFolder(f, 'trash'))}
-                  >删除</button
+                  on:click={() => {
+                    deleteStrategy = 'move';
+                    deleting = f;
+                  }}>删除…</button
                 >
               </div>{/each}
           </section>
@@ -896,10 +1173,23 @@
               支持浏览器 HTML 与完整业务 JSON。先预览，确认后写入。
             </p>
             <label
-              >选择 UTF-8 文件<input
+              class="dropzone"
+              class:active={dropActive}
+              on:dragover|preventDefault={() => (dropActive = true)}
+              on:dragleave={() => (dropActive = false)}
+              on:drop|preventDefault={(e) => {
+                dropActive = false;
+                run(() => importFile(e.dataTransfer?.files[0]));
+              }}
+              ><Icon name="upload" size={22} /><strong
+                >拖入文件，或点击选择</strong
+              ><small>浏览器导出的 .html，或本应用导出的 .json（UTF-8）</small
+              ><input
+                class="visually-hidden"
                 type="file"
                 accept=".html,.htm,.json"
-                on:change={(e) => run(() => importFile(e))}
+                on:change={(e) =>
+                  run(() => importFile(e.currentTarget.files?.[0]))}
               /></label
             >{#if importJob}<p>
                 识别 {importJob.parsed} 条收藏、{importJob.folders} 个目录
@@ -949,21 +1239,34 @@
                 >导出 HTML</button
               >
             </div>
-            <h3>Bookmarklet</h3>
+            <h3>快速收藏按钮</h3>
             <p class="muted">
-              将以下代码保存为浏览器书签的网址。在网页点击该书签后，确认保存。
+              把下面的按钮拖到浏览器书签栏。浏览网页时点一下，就能把当前页面存进收藏中心。
             </p>
-            <textarea
-              aria-label="Bookmarklet 代码"
-              readonly
-              value={bookmarklet}
-              rows="4"></textarea><button
-              on:click={() =>
-                run(async () => {
-                  await navigator.clipboard.writeText(bookmarklet);
-                  notice = 'Bookmarklet 已复制';
-                })}>复制 Bookmarklet</button
-            >
+            <div class="actions">
+              <a
+                class="bookmarklet"
+                href={bookmarklet}
+                title="拖到书签栏"
+                on:click|preventDefault={() =>
+                  (notice = '请把「存到收藏中心」按钮拖到浏览器书签栏')}
+                ><Icon name="bookmark" /> 存到收藏中心</a
+              ><button
+                on:click={() =>
+                  run(async () => {
+                    await navigator.clipboard.writeText(bookmarklet);
+                    notice = 'Bookmarklet 已复制';
+                  })}>复制代码</button
+              >
+            </div>
+            <details class="code-details">
+              <summary>查看代码（书签栏不可拖拽时手动新建书签）</summary>
+              <textarea
+                aria-label="Bookmarklet 代码"
+                readonly
+                value={bookmarklet}
+                rows="4"></textarea>
+            </details>
           </section>
           <section class="panel">
             <h2>Passkey 与登录设备</h2>
@@ -1023,20 +1326,27 @@
         </div>
       {:else}<div class="toolbar">
           {#if view === 'library'}<div class="search">
-              <span aria-hidden="true">⌕</span><input
+              <Icon name="search" size={16} /><input
                 type="search"
                 aria-label="搜索收藏"
                 placeholder="搜索标题、网址、备注或标签…"
+                bind:this={searchInput}
                 bind:value={query}
                 on:input={search}
-              /><kbd>搜索</kbd>
+                on:keydown={(e) => {
+                  if (e.key === 'Escape' && query) {
+                    query = '';
+                    search();
+                  }
+                }}
+              /><kbd title="按 / 键快速搜索">/</kbd>
             </div>
             <button
               class:active={organize}
               on:click={() => {
                 organize = !organize;
                 selected = [];
-              }}>{organize ? '完成整理' : '整理'}</button
+              }}>{organize ? '完成' : '批量操作'}</button
             >{:else}<p class="muted">
               删除的收藏会保留在这里，直到你主动清空。
             </p>
@@ -1054,12 +1364,16 @@
                 })}>清空回收站</button
             >{/if}
         </div>
-        {#if tag}<button
-            on:click={() => {
-              tag = '';
-              run(load);
-            }}>标签：{tag} ×</button
-          >{/if}
+        {#if tag}<div class="filters">
+            <button
+              class="filter-chip"
+              aria-label={'清除标签筛选 ' + tag}
+              on:click={() => {
+                tag = '';
+                run(load);
+              }}>标签：{tag}<Icon name="close" size={12} /></button
+            >
+          </div>{/if}
         {#if organize}<div class="batch">
             <label class="inline"
               ><input
@@ -1098,39 +1412,37 @@
           </div>{/if}
         <div class="list-heading">
           <span>{total} 条收藏</span>
-          <span class="drag-hint" role="status"
-            >{dropHint ||
-              (dragged
-                ? '拖到目录中移入，拖到收件箱移出；边线表示排序位置'
-                : view === 'library'
-                  ? query.trim() || tag
-                    ? '筛选中可拖入目录；清空筛选后可拖动排序'
-                    : '拖动行可排序，拖到左侧目录可移动'
-                  : '')}</span
-          ><span
-            >{folder === 'all'
-              ? '全部目录'
-              : folder === 'pinned'
-                ? '手动排序'
-                : '当前目录'}</span
-          >
+          {#if view === 'library'}<span class="drag-hint" role="status"
+              >{dropHint ||
+                (dragged
+                  ? '拖到左侧文件夹中移入，拖到收件箱移出；边线表示排序位置'
+                  : query.trim() || tag
+                    ? '筛选中不能调整顺序'
+                    : '')}</span
+            >{/if}
         </div>
-        <div class="bookmark-list" class:organizing={organize} aria-busy={busy}>
+        <div
+          class="bookmark-list"
+          class:organizing={organize}
+          hidden={!bookmarks.length}
+          aria-busy={busy}
+        >
           <table
             class="bookmark-table"
             aria-label={view === 'trash' ? '回收站收藏' : '收藏列表'}
           >
             <colgroup
-              ><col class="name-column" /><col class="tag-column" /><col
+              ><col class="name-column" />{#if showFolderColumn}<col
+                  class="folder-column"
+                />{/if}<col class="tag-column" /><col
                 class="url-column"
               /></colgroup
             >
             <thead
               ><tr
-                ><th scope="col">名称</th><th scope="col">标签</th><th
-                  scope="col"
-                  class="url-cell">网址</th
-                ></tr
+                ><th scope="col">名称</th>{#if showFolderColumn}<th scope="col"
+                    >文件夹</th
+                  >{/if}<th scope="col">标签</th><th scope="col">网站</th></tr
               ></thead
             >
             <tbody>
@@ -1148,11 +1460,12 @@
                   class="bookmark"
                   class:selected={selected.includes(b.id)}
                 >
-                  <td>
+                  <td class="name-td">
                     <div class="name-cell">
                       {#if view === 'library'}<span
                           class="drag-handle"
-                          aria-hidden="true"><RowIcon name="grip" /></span
+                          title="拖动排序，或拖到左侧文件夹"
+                          aria-hidden="true"><Icon name="grip" /></span
                         >{/if}
                       {#if organize}<input
                           aria-label={'选择 ' + b.title}
@@ -1166,29 +1479,21 @@
                         href={b.url_raw}
                         target={preferences.new_tab ? '_blank' : '_self'}
                         rel="noopener noreferrer"
-                        title={[
-                          b.title,
-                          b.folder_id
-                            ? folderPath(
-                                folders.find((f) => f.id === b.folder_id) || {
-                                  id: b.folder_id,
-                                  name: '原目录已删除',
-                                  parent_id: null,
-                                  version: 1,
-                                }
-                              )
-                            : '收件箱',
-                          b.notes,
-                        ]
+                        title={[b.title, b.url_raw, b.notes]
                           .filter(Boolean)
-                          .join(' · ')}
+                          .join('\n')}
                       >
-                        <span class="site-icon" aria-hidden="true"
-                          >{b.title.slice(0, 1).toUpperCase()}</span
+                        <span
+                          class="site-icon"
+                          aria-hidden="true"
+                          style:--hue={siteHue(b.url_raw)}
+                          >{(hostname(b.url_raw) || b.title)
+                            .slice(0, 1)
+                            .toUpperCase()}</span
                         >
                         <span class="bookmark-title">{b.title}</span>
                         {#if b.pinned}<span class="pin" aria-label="已置顶"
-                            >★</span
+                            ><Icon name="pin" size={11} filled /></span
                           >{/if}
                       </a>
                       <div class="item-actions">
@@ -1197,7 +1502,7 @@
                             title="恢复收藏"
                             aria-label={'恢复 ' + b.title}
                             on:click={() => run(() => change(b, 'restore'))}
-                            ><RowIcon name="restore" /></button
+                            ><Icon name="restore" /></button
                           >
                         {:else}
                           <button
@@ -1207,13 +1512,13 @@
                               run(async () => {
                                 await navigator.clipboard.writeText(b.url_raw);
                                 notice = '网址已复制';
-                              })}><RowIcon name="copy" /></button
+                              })}><Icon name="copy" /></button
                           >
                           <button
                             title="编辑收藏"
                             aria-label={'编辑 ' + b.title}
                             on:click={() => edit(b)}
-                            ><RowIcon name="edit" /></button
+                            ><Icon name="edit" /></button
                           >
                           {#if organize}
                             <button
@@ -1221,38 +1526,53 @@
                               aria-label={(b.pinned ? '取消置顶 ' : '置顶 ') +
                                 b.title}
                               on:click={() => run(() => change(b, 'pin'))}
-                              ><RowIcon name="pin" filled={b.pinned} /></button
+                              ><Icon name="pin" filled={b.pinned} /></button
                             >
                             <button
                               title="上移"
                               aria-label={'上移 ' + b.title}
                               on:click={() => run(() => moveUp(b))}
-                              ><RowIcon name="up" /></button
+                              ><Icon name="up" /></button
                             >
                             <button
                               class="danger"
                               title="移入回收站"
                               aria-label={'删除 ' + b.title}
                               on:click={() => run(() => change(b, 'delete'))}
-                              ><RowIcon name="trash" /></button
+                              ><Icon name="trash" /></button
                             >
                           {/if}
                         {/if}
                       </div>
                     </div>
                   </td>
-                  <td
+                  {#if showFolderColumn}<td class="folder-td"
+                      ><button
+                        class="folder-link"
+                        title={folderLabel(b.folder_id)}
+                        disabled={view === 'trash'}
+                        on:click={() => nav('library', b.folder_id || '')}
+                        ><Icon name={b.folder_id ? 'folder' : 'inbox'} />
+                        <span>{folderLabel(b.folder_id)}</span></button
+                      ></td
+                    >{/if}
+                  <td class="tag-td"
                     ><div class="tags" title={b.tags.join('、')}>
                       {#each b.tags as t}<button
+                          class:active-tag={tag === t}
+                          title={'筛选标签：' + t}
                           on:click={() => {
                             tag = t;
+                            offset = 0;
                             run(load);
                           }}>{t}</button
                         >{/each}
                     </div></td
                   >
-                  <td class="url-cell"
-                    ><span class="url" title={b.url_raw}>{b.url_raw}</span></td
+                  <td class="url-td"
+                    ><span class="url" title={b.url_raw}
+                      >{hostname(b.url_raw)}</span
+                    ></td
                   >
                 </tr>
               {/each}
@@ -1260,28 +1580,40 @@
           </table>
         </div>
         {#if bookmarks.length === 0}<div class="empty">
-            <span>◇</span>
+            <span aria-hidden="true">◇</span>
             <h2>
-              {query
+              {query || tag
                 ? '没有找到匹配的收藏'
                 : view === 'trash'
                   ? '回收站为空'
-                  : '给好内容留个位置'}
+                  : folder === 'pinned'
+                    ? '还没有置顶的收藏'
+                    : folder !== 'all'
+                      ? '这个文件夹还是空的'
+                      : '还没有收藏'}
             </h2>
             <p>
-              {query
-                ? '试试更短的关键词，或切换目录。'
-                : '保存网址，整理想法，在任何设备继续探索。'}
+              {query || tag
+                ? '试试更短的关键词，或清除标签筛选。'
+                : view === 'trash'
+                  ? '删除的收藏会先放在这里，可以随时恢复。'
+                  : folder === 'pinned'
+                    ? '编辑收藏时勾选「置顶」，或把收藏拖到左侧的常用置顶。'
+                    : folder !== 'all'
+                      ? '添加收藏，或把已有收藏拖到左侧的这个文件夹。'
+                      : '添加第一个网址，或在「设置与迁移」中导入浏览器书签。'}
             </p>
-            {#if view === 'library'}<button
+            {#if view === 'library' && !query && !tag && folder !== 'pinned'}<button
                 class="primary"
-                on:click={() => edit()}>添加第一条收藏</button
+                on:click={() => edit()}
+                >{folder === 'all' ? '添加第一条收藏' : '添加收藏'}</button
               >{/if}
           </div>{/if}
         {#if view === 'trash'}{#each trashedFolders as f}<div
               class="setting-row"
             >
-              <span>▱ {f.name}</span><button
+              <span class="with-icon"><Icon name="folder" /> {f.name}</span
+              ><button
                 on:click={() =>
                   run(async () => {
                     await request(`/api/v1/folders/${f.id}/restore`, 'POST', {
@@ -1307,15 +1639,21 @@
               }}>下一页</button
             >
           </div>{/if}{/if}
-      <footer>自己的收藏，自己的数据。</footer>
     </main>
   </div>
   {#if showEditor}<div class="overlay">
-      <dialog use:focusDialog aria-labelledby="editor-title" class="editor">
+      <dialog
+        use:modal={() => (showEditor = false)}
+        aria-labelledby="editor-title"
+        class="editor"
+      >
         <div class="dialog-heading">
           <h2 id="editor-title">{editId ? '编辑收藏' : '添加收藏'}</h2>
-          <button aria-label="关闭编辑器" on:click={() => (showEditor = false)}
-            >×</button
+          <button
+            class="icon-button"
+            aria-label="关闭编辑器"
+            on:click={() => (showEditor = false)}
+            ><Icon name="close" size={18} /></button
           >
         </div>
         <form on:submit|preventDefault={() => run(save)}>
@@ -1375,6 +1713,55 @@
             ><button class="primary" disabled={busy}>保存收藏</button>
           </div>
         </form>
+      </dialog>
+    </div>{/if}
+  {#if deleting}{@const target = deleting}
+    <div class="overlay">
+      <dialog
+        use:modal={() => (deleting = null)}
+        aria-labelledby="delete-title"
+        class="editor confirm"
+      >
+        <div class="dialog-heading">
+          <h2 id="delete-title">删除文件夹“{target.name}”</h2>
+        </div>
+        <p class="muted">
+          {descendants(target.id)
+            ? `它的 ${descendants(target.id)} 个子文件夹也会一起删除。`
+            : ''}文件夹里的收藏要怎么处理？
+        </p>
+        <label class="choice"
+          ><input
+            type="radio"
+            name="delete-strategy"
+            value="move"
+            bind:group={deleteStrategy}
+          /><span
+            ><strong>保留收藏，移到收件箱</strong><small
+              >只删除文件夹，收藏不受影响</small
+            ></span
+          ></label
+        ><label class="choice"
+          ><input
+            type="radio"
+            name="delete-strategy"
+            value="trash"
+            bind:group={deleteStrategy}
+          /><span
+            ><strong>连同收藏一起移入回收站</strong><small
+              >可以在回收站一键恢复文件夹及其内容</small
+            ></span
+          ></label
+        >
+        <div class="dialog-footer">
+          <button type="button" on:click={() => (deleting = null)}>取消</button
+          ><button
+            class="primary danger-fill"
+            disabled={busy}
+            on:click={() => run(() => deleteFolder(target, deleteStrategy))}
+            >删除文件夹</button
+          >
+        </div>
       </dialog>
     </div>{/if}
 {/if}
