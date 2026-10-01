@@ -54,6 +54,10 @@ authentication within five minutes; call `/auth/reauth/begin` and `finish` when
 | `GET /api/v1/auth/sessions` | Current host only, no session hashes or CSRF values |
 | `DELETE /api/v1/auth/sessions/{id}` | Current host revocation; recent auth |
 | `POST /api/v1/auth/sessions/revoke-others` | Keep current session, revoke other current-host sessions |
+| `GET /api/v1/update` | Current version, platform asset, `installable`, settings, last check time/error, `available` and `latest` release |
+| `PATCH /api/v1/update/settings` | `{schedule:"off"|"daily"|"weekly",weekday:1–7,time:"HH:MM",channel:"prerelease"|"stable"}`; server-local time |
+| `POST /api/v1/update/check` | Query GitHub Releases now; at most once per 10 seconds |
+| `POST /api/v1/update/install` | `{version}` matching the last checked release; recent auth; verifies SHA256SUMS, backs up, swaps the executable and restarts in place (Unix) |
 | `GET /healthz` | Minimal public liveness |
 
 Entity timestamps are UTC Unix seconds; versions and library revisions are

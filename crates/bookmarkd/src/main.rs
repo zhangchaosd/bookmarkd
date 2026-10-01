@@ -1,18 +1,18 @@
+mod backup;
 mod config;
 mod http;
 mod model;
 mod ordering;
 mod store;
 mod transfer;
+mod update;
 use anyhow::{Result, ensure};
+use backup::{private_dir, scrub_auth, snapshot};
 use bookmarkd_auth::{AuthStore, Identity, SqliteAuthStore, random};
 use clap::{Parser, Subcommand};
 use config::{Auth, Config, Server, Storage};
 use fs2::FileExt;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::PathBuf};
 #[derive(Parser)]
 #[command(version, about = "Private bookmark hub with Passkey authentication")]
 struct Cli {
@@ -74,6 +74,26 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// Check GitHub Releases for a newer version, install it, or roll back.
+    Update {
+        #[command(subcommand)]
+        command: UpdateCommand,
+    },
+}
+#[derive(Subcommand)]
+enum UpdateCommand {
+    /// Print whether a newer release is available (uses the configured channel).
+    Check,
+    /// Download, verify (SHA256SUMS), back up data and replace this executable.
+    Install {
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Restore the executable kept as `*.old` by the last install.
+    Rollback {
+        #[arg(long)]
+        yes: bool,
+    },
 }
 #[derive(Subcommand)]
 enum ConfigCommand {
@@ -105,27 +125,6 @@ enum AuthCommand {
         yes: bool,
     },
     Migrate,
-}
-fn private_dir(path: &Path) -> Result<()> {
-    fs::create_dir_all(path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
-    Ok(())
-}
-fn snapshot(source: &Path, target: &Path) -> Result<()> {
-    ensure!(!target.exists(), "backup destination already exists");
-    let db =
-        rusqlite::Connection::open_with_flags(source, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    db.backup("main", target, None)?;
-    Ok(())
-}
-fn scrub_auth(path: &Path) -> Result<()> {
-    let db = rusqlite::Connection::open(path)?;
-    db.execute_batch("DELETE FROM sessions; DELETE FROM grants; PRAGMA wal_checkpoint(TRUNCATE);")?;
-    Ok(())
 }
 fn lock(c: &Config) -> Result<fs::File> {
     let path = c.storage.business_db.with_extension("lock");
@@ -222,6 +221,15 @@ async fn main() -> Result<()> {
             let listener = tokio::net::TcpListener::bind(&c.server.listen).await?;
             eprintln!("bookmarkd listening on {}", c.server.listen);
             let app = http::App::new(c)?;
+            let updater = app.updater.clone();
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+                loop {
+                    tick.tick().await;
+                    let updater = updater.clone();
+                    let _ = tokio::task::spawn_blocking(move || updater.tick()).await;
+                }
+            });
             axum::serve(
                 listener,
                 http::router(app).into_make_service_with_connect_info::<std::net::SocketAddr>(),
@@ -287,20 +295,7 @@ async fn main() -> Result<()> {
             output,
             include_auth,
         } => {
-            ensure!(!output.exists(), "backup destination must not exist");
-            private_dir(&output)?;
-            snapshot(&c.storage.business_db, &output.join("bookmarks.db"))?;
-            if include_auth {
-                snapshot(&c.auth.store, &output.join("auth.db"))?;
-                scrub_auth(&output.join("auth.db"))?;
-                fs::copy(&c.auth.user_id_file, output.join("user-id.txt"))?;
-            }
-            fs::write(
-                output.join("manifest.json"),
-                serde_json::to_string_pretty(
-                    &serde_json::json!({"format":"bookmarkd-backup","schema":1,"auth":include_auth,"rp_id":c.auth.rp_id,"created_at":bookmarkd_auth::now()}),
-                )?,
-            )?;
+            backup::create(&c, &output, include_auth)?;
             println!("Consistent SQLite snapshots saved to {}", output.display());
         }
         Command::Restore {
@@ -363,6 +358,50 @@ async fn main() -> Result<()> {
                 "Restored; old sessions and setup grants invalidated. Previous business snapshot: {}",
                 rescue.display()
             );
+        }
+        Command::Update { command } => {
+            let updater = update::Updater::new(&c);
+            match command {
+                UpdateCommand::Check => match updater.check()? {
+                    Some(r) => println!(
+                        "Update available: v{} -> v{} ({})\n{}",
+                        update::CURRENT,
+                        r.version,
+                        if r.prerelease { "prerelease" } else { "stable" },
+                        r.url
+                    ),
+                    None => println!("bookmarkd v{} is up to date.", update::CURRENT),
+                },
+                UpdateCommand::Install { yes } => {
+                    let release = updater
+                        .check()?
+                        .ok_or_else(|| anyhow::anyhow!("already up to date"))?;
+                    ensure!(
+                        yes,
+                        "--yes required to install v{} over v{}",
+                        release.version,
+                        update::CURRENT
+                    );
+                    let installed = updater.install(&c, &release.version)?;
+                    println!(
+                        "Installed v{} at {}; data backup: {}\nRestart the service to run it, e.g. systemctl --user restart bookmarkd",
+                        installed.version,
+                        installed.executable.display(),
+                        installed.backup.display()
+                    );
+                }
+                UpdateCommand::Rollback { yes } => {
+                    ensure!(
+                        yes,
+                        "--yes required to swap back to the previous executable"
+                    );
+                    let executable = update::rollback()?;
+                    println!(
+                        "Restored the previous executable at {}; restart the service to run it.",
+                        executable.display()
+                    );
+                }
+            }
         }
         Command::Version | Command::Init { .. } => unreachable!(),
     }

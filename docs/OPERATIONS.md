@@ -90,8 +90,18 @@ notes and other app-only fields are not preserved by HTML export.
 
 ## Upgrade / 升级
 
-Back up, stop, replace the executable, run `config validate` and `doctor`, then
-restart. Keep the previous executable and backup for rollback. Restore data only
+From v0.4.0 the server can update itself from GitHub Releases (Settings → 版本与更新,
+or `bookmarkd update check|install --yes|rollback --yes`). Installing verifies the
+platform asset against the release's `SHA256SUMS`, runs `version` on it, writes a
+backup to `<data>/backups/pre-update-<from>-to-<to>-<time>`, keeps the previous
+binary as `<executable>.old`, and re-executes in place. Update settings and the last
+check result live in `<data>/update.json`. `BOOKMARKD_UPDATE_API` overrides the
+releases API base (default `https://api.github.com/repos/zhangchaosd/bookmarkd`).
+If the new version misbehaves, run `update rollback --yes` and restart; the data
+schema is unchanged between these releases, so the backup is only a safeguard.
+
+Manual upgrade: back up, stop, replace the executable, run `config validate` and
+`doctor`, then restart. Keep the previous executable and backup for rollback. Restore data only
 with a matching schema. The release manifests identify the actual runner OS and
 link dependencies. Linux binaries use glibc from Ubuntu 24.04; they are **not**
 claimed to run on older glibc or musl/Alpine. macOS/Windows binaries are unsigned.

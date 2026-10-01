@@ -64,6 +64,20 @@ Windows 使用 PowerShell 执行 `.\bookmarkd-windows-x86_64.exe`，不需要 `c
 
 最后一条命令在另一个终端执行。使用 `http://localhost:8765`，不要替换成 `127.0.0.1`，因为 Origin 必须精确匹配。
 
+## 检查与安装更新
+
+「设置与迁移 → 版本与更新」显示当前版本，可「立即检查」GitHub Releases，也可设置每天或每周固定时间（服务器时区）自动检查；渠道可选「包含预发布版本」（默认，目前所有版本均为预发布）或「仅正式版本」。自动检查默认关闭，开启后服务器会访问 `api.github.com`。
+
+定时检查**只提醒**：发现新版本后侧栏「设置与迁移」出现红点。点击「更新到 vX」并再次验证 Passkey 后才会安装：下载本平台文件，用同一 Release 的 `SHA256SUMS` 校验，运行新程序的 `version` 自检，把数据备份到 `data/backups/pre-update-*`，替换程序（旧程序保留为 `bookmarkd.old`），然后在原进程内重启（PID 不变，systemd 无需额外配置）。程序所在目录必须对运行用户可写。
+
+`SHA256SUMS` 能发现下载损坏，但无法防御 Release 本身被替换；Windows 不支持自动安装，只提示并给出下载链接。v0.3.0 及更早版本没有此功能，需要手动升级一次。
+
+```sh
+./bookmarkd --config ./data/config.toml update check
+./bookmarkd --config ./data/config.toml update install --yes   # 安装后手动重启服务
+./bookmarkd --config ./data/config.toml update rollback --yes  # 换回 bookmarkd.old，再重启服务
+```
+
 ## 从源码构建
 
 依赖：Rust 1.94.0（rustup 自动读取工具链文件）、Node.js 24、C 编译工具链及 Perl。Windows 构建还需 NASM。SQLite 和 OpenSSL 采用 bundled/vendored 构建。

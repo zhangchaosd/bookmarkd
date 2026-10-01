@@ -296,6 +296,39 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await expect(row('中文学习 Rust')).toBeVisible();
   // Palette preview, independent dark mode, and server-backed persistence.
   await page.getByRole('button', { name: '设置与迁移', exact: true }).click();
+  // Update settings persist without contacting GitHub; checking stays manual here.
+  const updatePanel = page.locator('.update-panel');
+  await expect(updatePanel).toContainText(/当前版本 v\d+\.\d+\.\d+/);
+  await expect(updatePanel).toContainText('尚未检查过更新');
+  await expect(page.getByLabel('自动检查')).toHaveValue('off');
+  await page.getByLabel('自动检查').selectOption('weekly');
+  await page.getByLabel('星期').selectOption('5');
+  await page.getByLabel('时间（服务器时区）').fill('21:15');
+  await page.getByLabel('更新渠道').selectOption('stable');
+  await page.getByRole('button', { name: '保存更新设置' }).click();
+  await expect(page.getByRole('status')).toContainText('更新设置已保存');
+  expect((await api('/api/v1/update')).value.settings).toEqual({
+    schedule: 'weekly',
+    weekday: 5,
+    time: '21:15',
+    channel: 'stable',
+  });
+  expect(
+    (
+      await api('/api/v1/update/settings', 'PATCH', {
+        schedule: 'hourly',
+        weekday: 1,
+        time: '04:00',
+        channel: 'stable',
+      })
+    ).status
+  ).toBe(400);
+  expect(
+    (await api('/api/v1/update/install', 'POST', { version: '9.9.9' })).status
+  ).toBe(400);
+  await page.getByLabel('自动检查').selectOption('off');
+  await page.getByRole('button', { name: '保存更新设置' }).click();
+  await expect(page.getByRole('status')).toContainText('更新设置已保存');
   for (const [id, name] of [
     ['forest', '森林绿'],
     ['ocean', '海洋蓝'],

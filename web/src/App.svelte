@@ -83,6 +83,77 @@
     { id: 'slate', name: '石墨灰', color: '#526175' },
   ];
   let preferencesDirty = false;
+  type UpdateSettings = {
+    schedule: string;
+    weekday: number;
+    time: string;
+    channel: string;
+  };
+  let updateInfo: {
+      current: string;
+      installable: boolean;
+      asset: string | null;
+      settings: UpdateSettings;
+      checked_at: number | null;
+      error: string | null;
+      available: boolean;
+      latest: {
+        version: string;
+        url: string;
+        notes: string;
+        published_at: string;
+        prerelease: boolean;
+        asset_url: string | null;
+      } | null;
+    } | null = null,
+    updateDraft: UpdateSettings | null = null,
+    updateDirty = false,
+    restarting = false;
+  const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  async function loadUpdate() {
+    updateInfo = await request('/api/v1/update');
+    if (!updateDirty && updateInfo) updateDraft = { ...updateInfo.settings };
+  }
+  async function saveUpdateSettings() {
+    updateInfo = await request('/api/v1/update/settings', 'PATCH', updateDraft);
+    updateDirty = false;
+    notice = '更新设置已保存';
+  }
+  async function checkUpdate() {
+    updateInfo = await request('/api/v1/update/check', 'POST', {});
+    notice = updateInfo?.available
+      ? `发现新版本 v${updateInfo.latest?.version}`
+      : updateInfo?.error
+        ? ''
+        : '已是最新版本';
+  }
+  async function installUpdate() {
+    const version = updateInfo?.latest?.version;
+    if (
+      !version ||
+      !confirm(
+        `安装 v${version}？\n\n将从 GitHub 下载并用 SHA256SUMS 校验，先自动备份数据，再替换程序并重启服务。旧版本会保留以便回滚。`
+      )
+    )
+      return;
+    await sensitive(async () => {
+      const r = await request('/api/v1/update/install', 'POST', { version });
+      notice = `已安装 v${r.version}，数据备份在 ${r.backup}`;
+      if (!r.restarting) return;
+      restarting = true;
+      // The server replaces its own process; wait for it to answer again.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      for (let i = 0; i < 60; i++) {
+        try {
+          if ((await fetch('/healthz')).ok) break;
+        } catch {
+          /* Still restarting. */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      location.reload();
+    });
+  }
   type FolderDraft = {
     mode: 'create' | 'rename';
     parent: string | null;
@@ -218,6 +289,7 @@
           request('/api/v1/auth/sessions'),
           request('/api/v1/auth/credentials'),
           request('/api/v1/preferences'),
+          loadUpdate(),
         ]);
       sessions = loadedSessions;
       credentials = loadedCredentials;
@@ -315,6 +387,7 @@
     await passkey('login', remember);
     await check();
     await load();
+    await loadUpdate();
     capture();
   }
   async function logout() {
@@ -736,6 +809,7 @@
         const loadedPreferences = await request('/api/v1/preferences');
         if (!preferencesDirty) preferences = loadedPreferences;
         await load();
+        await loadUpdate();
       }
     });
     const focus = () =>
@@ -983,7 +1057,10 @@
         ><button
           class:active={view === 'settings'}
           on:click={() => nav('settings')}
-          ><Icon name="settings" size={16} /> 设置与迁移</button
+          ><Icon name="settings" size={16} /> 设置与迁移{#if updateInfo?.available}<span
+              class="update-dot"
+              title={'有新版本 v' + updateInfo.latest?.version}
+            ></span>{/if}</button
         >
       </nav>
       <div class="aside-footer">
@@ -1267,6 +1344,106 @@
                 value={bookmarklet}
                 rows="4"></textarea>
             </details>
+          </section>
+          <section class="panel update-panel">
+            <h2>版本与更新</h2>
+            {#if updateInfo}
+              <div class="version-row">
+                <span>当前版本 <strong>v{updateInfo.current}</strong></span
+                >{#if updateInfo.available && updateInfo.latest}<span
+                    class="badge"
+                    >新版本 v{updateInfo.latest.version}{updateInfo.latest
+                      .prerelease
+                      ? '（预发布）'
+                      : ''}</span
+                  >{:else if updateInfo.checked_at && !updateInfo.error}<span
+                    class="muted">已是最新</span
+                  >{/if}
+              </div>
+              <p class="muted">
+                {updateInfo.checked_at
+                  ? '上次检查：' +
+                    new Date(updateInfo.checked_at * 1000).toLocaleString()
+                  : '尚未检查过更新'}
+              </p>
+              {#if updateInfo.error}<p class="error">
+                  检查失败：{updateInfo.error}
+                </p>{/if}
+              {#if updateInfo.available && updateInfo.latest}
+                <details class="code-details">
+                  <summary>更新说明</summary>
+                  <pre class="release-notes">{updateInfo.latest.notes ||
+                      '（无说明）'}</pre>
+                  <a
+                    href={updateInfo.latest.url}
+                    target="_blank"
+                    rel="noopener noreferrer">在 GitHub 查看 →</a
+                  >
+                </details>
+              {/if}
+              <div class="actions">
+                <button disabled={busy} on:click={() => run(checkUpdate)}
+                  >立即检查</button
+                >{#if updateInfo.available && updateInfo.latest}{#if updateInfo.installable}<button
+                      class="primary"
+                      disabled={busy || restarting}
+                      on:click={() => run(installUpdate)}
+                      >{restarting
+                        ? '正在重启…'
+                        : `更新到 v${updateInfo.latest.version}`}</button
+                    >{:else}<a
+                      class="button-link"
+                      href={updateInfo.latest.url}
+                      target="_blank"
+                      rel="noopener noreferrer">前往下载</a
+                    >{/if}{/if}
+              </div>
+              {#if !updateInfo.installable}<p class="muted">
+                  当前平台不支持自动安装，请从 Release 页面下载 {updateInfo.asset ||
+                    '对应文件'} 后手动替换。
+                </p>{/if}
+              {#if updateDraft}
+                <fieldset
+                  class="update-fields"
+                  disabled={busy}
+                  on:change={() => (updateDirty = true)}
+                >
+                  <div class="form-grid">
+                    <label
+                      >自动检查<select bind:value={updateDraft.schedule}
+                        ><option value="off">关闭</option><option value="daily"
+                          >每天</option
+                        ><option value="weekly">每周</option></select
+                      ></label
+                    >{#if updateDraft.schedule === 'weekly'}<label
+                        >星期<select bind:value={updateDraft.weekday}
+                          >{#each weekdays as day, i}<option value={i + 1}
+                              >{day}</option
+                            >{/each}</select
+                        ></label
+                      >{/if}{#if updateDraft.schedule !== 'off'}<label
+                        >时间（服务器时区）<input
+                          type="time"
+                          required
+                          bind:value={updateDraft.time}
+                        /></label
+                      >{/if}<label
+                      >更新渠道<select bind:value={updateDraft.channel}
+                        ><option value="prerelease">包含预发布版本</option
+                        ><option value="stable">仅正式版本</option></select
+                      ></label
+                    >
+                  </div>
+                  <button on:click={() => run(saveUpdateSettings)}
+                    >保存更新设置</button
+                  >
+                </fieldset>
+              {/if}
+              <p class="muted">
+                检查时服务器会访问
+                api.github.com。定时任务只提醒，不会自动安装；安装前会校验文件并备份数据。
+              </p>
+            {/if}
           </section>
           <section class="panel">
             <h2>Passkey 与登录设备</h2>

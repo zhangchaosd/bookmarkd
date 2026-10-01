@@ -65,6 +65,20 @@ For local development only:
 
 Use `http://localhost:8765` exactly; `127.0.0.1` is a different origin.
 
+## Checking for and installing updates
+
+Settings → “版本与更新” shows the current version, checks GitHub Releases on demand, and can check automatically every day or every week at a fixed server-local time. The channel is either prereleases included (default; every release so far is a prerelease) or stable only. Automatic checks are off by default; when enabled, the server contacts `api.github.com`.
+
+Scheduled checks **only notify**: a red dot appears on “设置与迁移”. Installing requires selecting “更新到 vX” and a fresh Passkey verification. The server then downloads this platform's file, verifies it against the same release's `SHA256SUMS`, runs the new binary's `version` self-check, backs up data to `data/backups/pre-update-*`, swaps the executable (keeping the previous one as `bookmarkd.old`), and restarts in place (same PID, so systemd needs no extra configuration). The executable's directory must be writable by the service user.
+
+`SHA256SUMS` detects corrupted downloads but cannot protect against a replaced release. Windows is check-only and links to the download. v0.3.0 and earlier lack this feature and need one manual upgrade.
+
+```sh
+./bookmarkd --config ./data/config.toml update check
+./bookmarkd --config ./data/config.toml update install --yes   # then restart the service
+./bookmarkd --config ./data/config.toml update rollback --yes  # swap back to bookmarkd.old, then restart
+```
+
 ## Build from source
 
 Requires Rust 1.94.0 (pinned via rustup), Node.js 24, a C toolchain, and Perl. Windows builds also need NASM. SQLite and OpenSSL are bundled/vendored.

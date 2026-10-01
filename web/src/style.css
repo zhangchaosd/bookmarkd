@@ -1188,3 +1188,65 @@ nav .folder-row .folder-more {
 [hidden] {
   display: none !important;
 }
+.update-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--danger);
+}
+.version-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--selected);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.release-notes {
+  max-height: 220px;
+  overflow: auto;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: inherit;
+  white-space: pre-wrap;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 13px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.button-link:hover {
+  color: var(--on-accent);
+  background: var(--accent-hover);
+}
+.update-fields {
+  border: 0;
+  margin: 14px 0 0;
+  padding: 14px 0 0;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+}
+.update-fields .form-grid label {
+  margin: 0 0 12px;
+}
+.update-panel .actions {
+  margin-top: 12px;
+}

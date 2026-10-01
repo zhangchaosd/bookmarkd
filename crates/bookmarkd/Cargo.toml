@@ -23,6 +23,9 @@ mime_guess = "2"
 unicode-normalization = "0.1"
 scraper = "0.24"
 fs2 = "0.4"
+ureq = "3"
+semver = "1"
+chrono = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

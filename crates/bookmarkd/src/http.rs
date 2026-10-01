@@ -3,6 +3,7 @@ use crate::{
     model::{self, Bookmark, Folder, Library},
     store::Store,
     transfer::{self, Import},
+    update::{self, Updater},
 };
 use anyhow::{Result, bail, ensure};
 use axum::{
@@ -39,6 +40,7 @@ pub struct App {
     pub config: Config,
     pub store: Store,
     pub auth: SqliteAuthStore,
+    pub updater: Arc<Updater>,
     engine: Engine,
     ceremonies: Mutex<HashMap<String, Ceremony>>,
     grants: Mutex<HashMap<String, (String, i64)>>,
@@ -60,6 +62,7 @@ impl App {
             &config.server.public_url,
         )?;
         Ok(Arc::new(Self {
+            updater: Arc::new(Updater::new(&config)),
             config,
             store,
             auth,
@@ -480,6 +483,48 @@ fn auth_route(
     }
     Ok(r)
 }
+fn update_route(
+    app: &App,
+    method: &Method,
+    parts: &[&str],
+    v: Value,
+    s: &Session,
+) -> Result<Value> {
+    let updater = &app.updater;
+    match (method.as_str(), parts) {
+        ("GET", ["update"]) => {}
+        ("PATCH", ["update", "settings"]) => updater.save_settings(
+            serde_json::from_value(v).map_err(|_| anyhow::anyhow!("无效的更新设置"))?,
+        )?,
+        ("POST", ["update", "check"]) => {
+            let last = updater.state().checked_at.unwrap_or(0);
+            ensure!(now() - last >= 10, "RATE_LIMITED");
+            updater.check()?;
+        }
+        ("POST", ["update", "install"]) => {
+            recent(s)?;
+            let installed =
+                updater.install(&app.config, v["version"].as_str().unwrap_or_default())?;
+            #[cfg(unix)]
+            {
+                // Let this response reach the browser before the process image is replaced.
+                let executable = installed.executable.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(800));
+                    update::reexec(&executable)
+                });
+            }
+            return Ok(json!({
+                "ok": true,
+                "version": installed.version,
+                "backup": installed.backup.display().to_string(),
+                "restarting": cfg!(unix),
+            }));
+        }
+        _ => bail!("NOT_FOUND"),
+    }
+    Ok(updater.status())
+}
 fn check_version(actual: i64, v: &Value, current: &impl serde::Serialize) -> Result<()> {
     if v["version"].as_i64() != Some(actual) {
         bail!("VERSION_CONFLICT:{}", serde_json::to_string(current)?);
@@ -555,6 +600,9 @@ fn api(
             .parse()?,
         );
         return Ok(r);
+    }
+    if parts.first() == Some(&"update") {
+        return update_route(app, method, &parts, v, s).map(json_response);
     }
     if parts.first() == Some(&"imports") {
         let mut jobs = app.imports.lock().unwrap();
