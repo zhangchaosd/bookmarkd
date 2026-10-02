@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Icon from './Icon.svelte';
+  import AuthLayout from './AuthLayout.svelte';
+  import PinnedShelf from './PinnedShelf.svelte';
   import { request, passkey, setCSRF, csrf, ApiError } from './api';
   type Bookmark = {
     id: string;
@@ -43,6 +45,37 @@
     total = 0,
     revision = -1,
     offset = 0;
+  let sidebar: HTMLElement;
+  let mobileToggle: HTMLButtonElement;
+  async function setMobileNav(open: boolean) {
+    mobileNav = open;
+    await tick();
+    if (open)
+      (
+        sidebar?.querySelector<HTMLButtonElement>('nav button.active') ||
+        sidebar?.querySelector<HTMLButtonElement>('nav button')
+      )?.focus();
+    else mobileToggle?.focus();
+  }
+  let layout = readLayout();
+  function readLayout(): 'list' | 'grid' {
+    try {
+      return localStorage.getItem('bookmarkd-layout') === 'grid'
+        ? 'grid'
+        : 'list';
+    } catch {
+      return 'list';
+    }
+  }
+  function setLayout(next: 'list' | 'grid') {
+    layout = next;
+    try {
+      localStorage.setItem('bookmarkd-layout', next);
+    } catch {
+      /* Private storage may be unavailable. */
+    }
+  }
+  let highlights: Bookmark[] = [];
   let organize = false,
     selected: string[] = [],
     mobileNav = false,
@@ -76,7 +109,7 @@
       new_tab: true,
     };
   const palettes = [
-    { id: 'forest', name: '森林绿', color: '#397753' },
+    { id: 'forest', name: '陶土橙', color: '#b84d2d' },
     { id: 'ocean', name: '海洋蓝', color: '#2563a6' },
     { id: 'violet', name: '鸢尾紫', color: '#7651a8' },
     { id: 'amber', name: '暖琥珀', color: '#956014' },
@@ -249,9 +282,11 @@
   }
   function clearPrivate() {
     resetDrag();
+    mobileNav = false;
     preferencesDirty = false;
     authenticated = false;
     bookmarks = [];
+    highlights = [];
     folders = [];
     trashedFolders = [];
     sessions = [];
@@ -304,14 +339,21 @@
         params.set('folder_id', folder);
       if (folder === 'pinned') params.set('pinned', 'true');
       if (tag) params.set('tag', tag);
-      const r = await request('/api/v1/bookmarks?' + params);
+      const [r, featured] = await Promise.all([
+        request('/api/v1/bookmarks?' + params),
+        folder === 'all' && !query && !tag && offset === 0
+          ? request('/api/v1/bookmarks?pinned=true&limit=3')
+          : Promise.resolve(null),
+      ]);
       if (seq !== loadSeq) return;
+      if (featured) highlights = featured.items;
       bookmarks = r.items;
       total = r.total;
       revision = r.revision;
     }
   }
   async function nav(next: string, f = 'all') {
+    const fromMobileNav = mobileNav;
     view = next;
     folder = f;
     offset = 0;
@@ -323,6 +365,7 @@
       next === 'library' ? '/library' : '/' + next
     );
     await run(load);
+    if (fromMobileNav) mobileToggle?.focus();
   }
   function search() {
     clearTimeout(searchTimer);
@@ -386,6 +429,8 @@
   async function login() {
     await passkey('login', remember);
     await check();
+    const loadedPreferences = await request('/api/v1/preferences');
+    if (!preferencesDirty) preferences = loadedPreferences;
     await load();
     await loadUpdate();
     capture();
@@ -728,12 +773,32 @@
     node.focus();
     node.select();
   }
-  function openFolderMenu(id: string, x: number, y: number) {
+  async function openFolderMenu(id: string, x: number, y: number) {
     folderMenu = {
       id,
       x: Math.min(x, innerWidth - 200),
       y: Math.min(y, innerHeight - 170),
     };
+    await tick();
+    sidebar?.querySelector<HTMLButtonElement>('.folder-menu button')?.focus();
+  }
+  function menuKeys(event: KeyboardEvent) {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const items = Array.from(
+      (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
+        'button'
+      )
+    );
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? items.length - 1
+          : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) %
+            items.length;
+    event.preventDefault();
+    items[next]?.focus();
   }
   async function deleteFolder(f: Folder, strategy: string) {
     deleting = null;
@@ -826,7 +891,40 @@
     const pageshow = () => {
       if (!ready) focus();
     };
+    const resize = () => {
+      if (window.innerWidth > 700) mobileNav = false;
+    };
     const keydown = (event: KeyboardEvent) => {
+      if (
+        mobileNav &&
+        authenticated &&
+        sidebar?.isConnected &&
+        event.key === 'Tab' &&
+        !document.querySelector('dialog[open]')
+      ) {
+        const focusable = Array.from(
+          sidebar.querySelectorAll<HTMLElement>(
+            'a[href], button:not(:disabled), input:not(:disabled)'
+          )
+        ).filter((node) => node.getClientRects().length > 0);
+        const first = focusable[0],
+          last = focusable[focusable.length - 1];
+        if (
+          event.shiftKey &&
+          (document.activeElement === first ||
+            !sidebar.contains(document.activeElement))
+        ) {
+          event.preventDefault();
+          last?.focus();
+        } else if (
+          !event.shiftKey &&
+          (document.activeElement === last ||
+            !sidebar.contains(document.activeElement))
+        ) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
       const target = event.target as HTMLElement;
       if (
         event.key === '/' &&
@@ -837,13 +935,31 @@
       ) {
         event.preventDefault();
         searchInput.focus();
-      } else if (event.key === 'Escape') folderMenu = null;
+      } else if (
+        event.key === 'Escape' &&
+        !document.querySelector('dialog[open]')
+      ) {
+        if (folderMenu) {
+          const id = folderMenu.id;
+          folderMenu = null;
+          Array.from(
+            sidebar.querySelectorAll<HTMLButtonElement>('[data-folder-menu]')
+          )
+            .find((button) => button.dataset.folderMenu === id)
+            ?.focus();
+          return;
+        }
+        if (mobileNav) {
+          setMobileNav(false);
+        }
+      }
     };
     const closeMenu = (event: MouseEvent) => {
       if (!(event.target as HTMLElement).closest('.folder-menu,.folder-more'))
         folderMenu = null;
     };
     window.addEventListener('keydown', keydown);
+    window.addEventListener('resize', resize);
     window.addEventListener('mousedown', closeMenu);
     window.addEventListener('focus', focus);
     window.addEventListener('pagehide', pagehide);
@@ -851,6 +967,7 @@
     return () => {
       channel?.close();
       window.removeEventListener('keydown', keydown);
+      window.removeEventListener('resize', resize);
       window.removeEventListener('mousedown', closeMenu);
       window.removeEventListener('focus', focus);
       window.removeEventListener('pagehide', pagehide);
@@ -860,58 +977,70 @@
   });
 </script>
 
-{#if !ready}<main class="auth"><p>正在检查会话…</p></main>
+{#if !ready}<main class="loading-screen">
+    <span class="loading-mark"><Icon name="bookmark" size={26} /></span>
+    <p>正在打开你的收藏…</p>
+  </main>
 {:else if setup}
-  <main class="auth">
-    <div class="brandmark">◆</div>
-    <h1>初始化收藏中心</h1>
-    <p class="muted">使用服务器管理终端提供的一次性授权。</p>
-    <form
-      on:submit|preventDefault={() =>
-        run(async () => {
-          if (!verified) {
-            await request('/auth/setup/verify', 'POST', { token });
-            token = '';
-            verified = true;
-          }
-          await passkey('register');
-          location.href = '/login';
-        })}
-    >
-      <label
-        >Setup Token<input
-          type="password"
-          bind:value={token}
-          required={!verified}
-          autocomplete="off"
-          disabled={verified}
-        /></label
-      ><button class="primary" disabled={busy}
-        >{verified ? '创建 Passkey' : '验证并创建 Passkey'}</button
+  <AuthLayout setup
+    ><main class="auth">
+      <h1>初始化收藏中心</h1>
+      <p class="muted">使用服务器管理终端提供的一次性授权。</p>
+      <form
+        on:submit|preventDefault={() =>
+          run(async () => {
+            if (!verified) {
+              await request('/auth/setup/verify', 'POST', { token });
+              token = '';
+              verified = true;
+            }
+            await passkey('register');
+            location.href = '/login';
+          })}
       >
-    </form>
-    <p role="alert" class="error">{error}</p>
-  </main>
+        <label
+          >Setup Token<input
+            type="password"
+            bind:value={token}
+            required={!verified}
+            autocomplete="off"
+            disabled={verified}
+          /></label
+        ><button class="primary" disabled={busy}
+          >{verified ? '创建 Passkey' : '验证并创建 Passkey'}</button
+        >
+      </form>
+      <p role="alert" class="error">{error}</p>
+    </main></AuthLayout
+  >
 {:else if !authenticated}
-  <main class="auth">
-    <div class="brandmark" aria-hidden="true">◆</div>
-    <h1>收藏中心</h1>
-    <button class="primary login" disabled={busy} on:click={() => run(login)}
-      >{busy ? '等待 Passkey 验证…' : '使用 Passkey 登录'}</button
-    ><label class="remember"
-      ><input type="checkbox" bind:checked={remember} /> 在此设备保持登录 30 天</label
-    >
-    <p role="alert" class="error">{error}</p>
-  </main>
+  <AuthLayout
+    ><main class="auth">
+      <h1>好久不见。</h1>
+      <p class="auth-description">你的灵感、发现与热爱，都在这里。</p>
+      <button class="primary login" disabled={busy} on:click={() => run(login)}
+        >{busy ? '等待 Passkey 验证…' : '使用 Passkey 登录'}</button
+      ><label class="remember"
+        ><input type="checkbox" bind:checked={remember} /> 在此设备保持登录 30 天</label
+      >
+      <p role="alert" class="error">{error}</p>
+    </main></AuthLayout
+  >
 {:else}
+  <a class="skip-link" href="#workspace">跳到收藏内容</a>
   <div class="shell">
     {#if mobileNav}<button
         class="scrim"
         aria-label="关闭导航"
-        on:click={() => (mobileNav = false)}
+        on:click={() => setMobileNav(false)}
       ></button>{/if}
-    <aside class:open={mobileNav}>
-      <a class="brand" href="/">◆ <strong>收藏中心</strong></a>
+    <aside id="sidebar" bind:this={sidebar} class:open={mobileNav}>
+      <a class="brand" href="/" aria-label="bookmarkd 收藏中心"
+        ><span class="brand-symbol"><Icon name="bookmark" size={19} /></span
+        ><strong>bookmarkd<span>.</span></strong></a
+      >
+      <p class="brand-caption">给好奇心，一个归处。</p>
+      <div class="nav-label">我的空间 <span>WORKSPACE</span></div>
       <nav aria-label="收藏导航">
         <button
           class:active={view === 'library' && folder === 'all'}
@@ -1018,6 +1147,8 @@
                 /><span>{row.folder.name}</span></button
               ><button
                 class="folder-more icon-button"
+                data-folder-menu={row.folder.id}
+                aria-expanded={folderMenu?.id === row.folder.id}
                 title="更多操作"
                 aria-label={'更多操作：' + row.folder.name}
                 aria-haspopup="menu"
@@ -1064,58 +1195,88 @@
         >
       </nav>
       <div class="aside-footer">
+        <div class="private-note">
+          <span class="private-dot"></span> 私人收藏空间 <span>↗</span>
+        </div>
+        <p>悉心收集，自在探索。</p>
         <button on:click={() => run(logout)}
           ><Icon name="logout" /> 退出登录</button
         >
       </div>
-    </aside>
-    {#if folderMenu}
-      {@const menuFolder = folders.find((f) => f.id === folderMenu?.id)}
-      {#if menuFolder}<div
-          class="folder-menu"
-          role="menu"
-          style:left={folderMenu.x + 'px'}
-          style:top={folderMenu.y + 'px'}
-        >
-          <button
-            role="menuitem"
-            on:click={() =>
-              startFolderDraft({
-                mode: 'create',
-                parent: menuFolder.id,
-                name: '',
-              })}><Icon name="plus" /> 新建子文件夹</button
-          ><button
-            role="menuitem"
-            on:click={() =>
-              startFolderDraft({
-                mode: 'rename',
-                parent: menuFolder.parent_id,
-                id: menuFolder.id,
-                version: menuFolder.version,
-                name: menuFolder.name,
-              })}><Icon name="edit" /> 重命名</button
-          ><button
-            role="menuitem"
-            class="danger"
-            on:click={() => {
-              // Read the folder before clearing the menu it is derived from.
-              deleting = menuFolder;
-              deleteStrategy = 'move';
-              folderMenu = null;
-            }}><Icon name="trash" /> 删除…</button
+      {#if folderMenu}
+        {@const menuFolder = folders.find((f) => f.id === folderMenu?.id)}
+        {#if menuFolder}<div
+            class="folder-menu"
+            role="menu"
+            tabindex="-1"
+            on:keydown={menuKeys}
+            style:left={folderMenu.x + 'px'}
+            style:top={folderMenu.y + 'px'}
           >
-        </div>{/if}
-    {/if}
-    <main class="workspace">
-      <header>
+            <button
+              role="menuitem"
+              on:click={() =>
+                startFolderDraft({
+                  mode: 'create',
+                  parent: menuFolder.id,
+                  name: '',
+                })}><Icon name="plus" /> 新建子文件夹</button
+            ><button
+              role="menuitem"
+              on:click={() =>
+                startFolderDraft({
+                  mode: 'rename',
+                  parent: menuFolder.parent_id,
+                  id: menuFolder.id,
+                  version: menuFolder.version,
+                  name: menuFolder.name,
+                })}><Icon name="edit" /> 重命名</button
+            ><button
+              role="menuitem"
+              class="danger"
+              on:click={() => {
+                // Read the folder before clearing the menu it is derived from.
+                deleting = menuFolder;
+                deleteStrategy = 'move';
+                folderMenu = null;
+              }}><Icon name="trash" /> 删除…</button
+            >
+          </div>{/if}
+      {/if}
+    </aside>
+    <main class="workspace" id="workspace" tabindex="-1" inert={mobileNav}>
+      <div class="workspace-topline">
+        <a class="mobile-brand" href="/" aria-label="bookmarkd 收藏中心"
+          >bookmarkd<span>.</span></a
+        ><span class="desktop-breadcrumb"
+          >PERSONAL ARCHIVE <span class="topline-slash">/</span>
+          <span class="topline-section"
+            >{view === 'settings'
+              ? 'PREFERENCES'
+              : view === 'trash'
+                ? 'RECYCLE BIN'
+                : 'COLLECTION'}</span
+          ></span
+        ><span class="local-status"><span></span> 本地珍藏 · 由你掌握</span>
+      </div>
+      <header class="page-header">
         <button
           class="mobile-toggle"
           aria-label="打开导航"
-          on:click={() => (mobileNav = !mobileNav)}
+          aria-expanded={mobileNav}
+          aria-controls="sidebar"
+          bind:this={mobileToggle}
+          on:click={() => setMobileNav(!mobileNav)}
           ><Icon name="menu" size={18} /></button
         >
-        <div>
+        <div class="page-heading">
+          <p class="eyebrow section-number">
+            {view === 'settings'
+              ? '03 — MAKE IT YOURS'
+              : view === 'trash'
+                ? '02 — A SECOND CHANCE'
+                : '01 — CURATED BY YOU'}
+          </p>
           {#if view === 'library' && folder && folder !== 'all' && folder !== 'pinned'}
             {@const parent = folders.find((f) => f.id === folder)?.parent_id}
             {#if parent}<p class="eyebrow">{folderLabel(parent)} /</p>{/if}
@@ -1131,6 +1292,19 @@
                     ? '收件箱'
                     : folders.find((f) => f.id === folder)?.name || '全部收藏'}
           </h1>
+          <p class="page-description">
+            {view === 'settings'
+              ? '让这个空间，更合你的习惯。'
+              : view === 'trash'
+                ? '暂时放下的，也值得一次回望。'
+                : folder === 'pinned'
+                  ? '那些值得，一次次重访的地方。'
+                  : folder === ''
+                    ? '先留住心动，再慢慢整理。'
+                    : folder !== 'all'
+                      ? '把相关的发现，安放在一起。'
+                      : '让每一次发现，都有迹可循。'}
+          </p>
         </div>
         {#if view === 'library'}<button
             class="primary add-button"
@@ -1501,12 +1675,30 @@
             >
           </section>
         </div>
-      {:else}<div class="toolbar">
+      {:else}
+        {#if view === 'library' && folder === 'all' && !query && !tag && !organize && offset === 0 && highlights.length}
+          <PinnedShelf items={highlights} newTab={preferences.new_tab} />
+        {/if}
+        <div class="collection-heading">
+          <h2>
+            {view === 'trash'
+              ? '暂存的收藏'
+              : query || tag
+                ? '查找结果'
+                : '收藏目录'} <span>{String(total).padStart(2, '0')}</span>
+          </h2>
+          <span class="collection-caption"
+            >{view === 'trash'
+              ? 'WAITING TO BE REDISCOVERED'
+              : 'GOOD THINGS, KEPT CLOSE.'}</span
+          >
+        </div>
+        <div class="toolbar">
           {#if view === 'library'}<div class="search">
               <Icon name="search" size={16} /><input
                 type="search"
                 aria-label="搜索收藏"
-                placeholder="搜索标题、网址、备注或标签…"
+                placeholder="搜索你的收藏…"
                 bind:this={searchInput}
                 bind:value={query}
                 on:input={search}
@@ -1518,12 +1710,31 @@
                 }}
               /><kbd title="按 / 键快速搜索">/</kbd>
             </div>
+            <div class="view-switch" role="group" aria-label="浏览布局">
+              <button
+                class:chosen={layout === 'list'}
+                aria-label="列表视图"
+                aria-pressed={layout === 'list'}
+                on:click={() => setLayout('list')}
+                ><Icon name="list" size={17} /></button
+              ><button
+                class:chosen={layout === 'grid'}
+                aria-label="卡片视图"
+                aria-pressed={layout === 'grid'}
+                on:click={() => setLayout('grid')}
+                ><Icon name="library" size={16} /></button
+              >
+            </div>
             <button
+              class="organize-button"
               class:active={organize}
               on:click={() => {
                 organize = !organize;
                 selected = [];
-              }}>{organize ? '完成' : '批量操作'}</button
+              }}
+              ><Icon name="sliders" size={15} />{organize
+                ? '完成'
+                : '批量操作'}</button
             >{:else}<p class="muted">
               删除的收藏会保留在这里，直到你主动清空。
             </p>
@@ -1601,6 +1812,7 @@
         <div
           class="bookmark-list"
           class:organizing={organize}
+          class:gallery={layout === 'grid' && !organize && view === 'library'}
           hidden={!bookmarks.length}
           aria-busy={busy}
         >
@@ -1652,6 +1864,7 @@
                         />{/if}
                       <a
                         class="bookmark-link"
+                        aria-label={b.title}
                         draggable="false"
                         href={b.url_raw}
                         target={preferences.new_tab ? '_blank' : '_self'}
@@ -1668,7 +1881,12 @@
                             .slice(0, 1)
                             .toUpperCase()}</span
                         >
-                        <span class="bookmark-title">{b.title}</span>
+                        <span class="bookmark-copy"
+                          ><span class="bookmark-title">{b.title}</span
+                          >{#if b.notes}<span class="bookmark-note"
+                              >{b.notes}</span
+                            >{/if}</span
+                        >
                         {#if b.pinned}<span class="pin" aria-label="已置顶"
                             ><Icon name="pin" size={11} filled /></span
                           >{/if}
@@ -1757,7 +1975,11 @@
           </table>
         </div>
         {#if bookmarks.length === 0}<div class="empty">
-            <span aria-hidden="true">◇</span>
+            <div class="empty-illustration" aria-hidden="true">
+              <span></span><span></span><span
+                ><Icon name="bookmark" size={32} /></span
+              >
+            </div>
             <h2>
               {query || tag
                 ? '没有找到匹配的收藏'
@@ -1767,7 +1989,7 @@
                     ? '还没有置顶的收藏'
                     : folder !== 'all'
                       ? '这个文件夹还是空的'
-                      : '还没有收藏'}
+                      : '好的发现，值得留下。'}
             </h2>
             <p>
               {query || tag
@@ -1780,6 +2002,14 @@
                       ? '添加收藏，或把已有收藏拖到左侧的这个文件夹。'
                       : '添加第一个网址，或在「设置与迁移」中导入浏览器书签。'}
             </p>
+            {#if query || tag}<button
+                on:click={() => {
+                  query = '';
+                  tag = '';
+                  offset = 0;
+                  run(load);
+                }}>清除筛选</button
+              >{/if}
             {#if view === 'library' && !query && !tag && folder !== 'pinned'}<button
                 class="primary"
                 on:click={() => edit()}
@@ -1816,6 +2046,11 @@
               }}>下一页</button
             >
           </div>{/if}{/if}
+      <footer class="workspace-footer">
+        <span>少一点遗忘，多一点灵感。</span><span
+          >BOOKMARKD <i>—</i> YOUR PERSONAL ARCHIVE</span
+        >
+      </footer>
     </main>
   </div>
   {#if showEditor}<div class="overlay">
@@ -1825,7 +2060,12 @@
         class="editor"
       >
         <div class="dialog-heading">
-          <h2 id="editor-title">{editId ? '编辑收藏' : '添加收藏'}</h2>
+          <div>
+            <p class="dialog-kicker">
+              {editId ? 'REFINE YOUR COLLECTION' : 'A GOOD FIND'}
+            </p>
+            <h2 id="editor-title">{editId ? '编辑收藏' : '添加收藏'}</h2>
+          </div>
           <button
             class="icon-button"
             aria-label="关闭编辑器"

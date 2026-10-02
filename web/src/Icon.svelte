@@ -1,5 +1,7 @@
 <script lang="ts">
   export let name:
+    | 'list'
+    | 'sliders'
     | 'copy'
     | 'edit'
     | 'pin'
@@ -36,7 +38,15 @@
   aria-hidden="true"
   focusable="false"
 >
-  {#if name === 'grip'}
+  {#if name === 'list'}
+    <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+  {:else if name === 'sliders'}
+    <path d="M3 7h5m4 0h9M3 17h9m4 0h5" /><circle cx="10" cy="7" r="2" /><circle
+      cx="14"
+      cy="17"
+      r="2"
+    />
+  {:else if name === 'grip'}
     <path
       d="M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01"
       stroke-width="3"

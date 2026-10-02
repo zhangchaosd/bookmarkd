@@ -110,3 +110,60 @@ revision rejection and transactional rollback of invalid folder/anchor moves.
 Frontend checks reported zero errors/warnings; production build, Rust formatting
 and strict Clippy passed. Current frontend assets are approximately 79 KiB JS
 (30.7 KiB gzip) and 11 KiB CSS.
+
+## Editorial archive redesign — 2026-10-02
+
+This redesign replaces the earlier compact UI described above. The working branch
+is `codex/ui-editorial-redesign`. The visual direction is a private archive: warm
+paper surfaces, ink typography, terracotta accents, Chinese serif headings, and
+original SVG bookmark artwork. Existing authentication and business APIs remain
+in use; no remote fonts, images, or new runtime dependencies are required.
+
+The library now has a three-item pinned shelf fetched in pinned order independently
+of ordinary pagination, device-persistent list/card views, visible bookmark notes,
+68px comfortable rows, and 40px compact rows. Batch operations retain the list
+layout. Login, setup, settings, dialogs, empty states, notifications, mobile
+navigation, and all five light/dark palettes use the same visual language.
+
+Three review passes covered composition and hierarchy, real browser behavior, and
+an independent code/accessibility review. Follow-up fixes included readable metadata,
+mobile card domain spacing, pinned pagination/order, restored preferences immediately
+after login, and mobile navigation focus handling. The mobile menu now traps focus,
+marks the workspace inert, supports keyboard access to folder actions, returns focus
+on Escape, and releases its focus scope on logout. Reduced-motion preferences disable
+nonessential movement.
+
+Reproducible validation:
+
+```sh
+npm run check --prefix web
+npm run build --prefix web
+cargo build --locked
+npm test --prefix web
+```
+
+- Svelte reports zero errors and warnings; production frontend and Rust builds pass.
+- Both Playwright scenarios pass using isolated temporary databases and Chromium
+  virtual WebAuthn authenticators. The existing authentication, conflict, migration,
+  host isolation, recovery, and desktop drag-and-drop scenario remains intact.
+- The new design scenario covers list/card persistence, `/` search, empty-result
+  recovery, mobile folder/tag navigation, dialog Escape, real bookmark creation and
+  editing, saved/system appearance, menu Tab/arrow-key navigation, and mobile logout.
+- List and card layouts have no document-level horizontal overflow at 320, 390,
+  768, 1024, and 1440px. Settings are checked at those widths for every combination
+  of five palettes and light/dark appearance. Mobile login and the 320px editor
+  also fit their viewports. Long bilingual titles and five-tag bookmarks are included.
+- The browser tests assert zero uncaught page errors. Default light text contrast
+  is 13.71:1; muted text is 5.14:1; the terracotta button with white text is 5.08:1.
+- The production JS/CSS transfer is approximately 54 kB combined after gzip,
+  excluding HTTP overhead. This is a bundle measurement, not a Core Web Vitals claim.
+
+Updated screenshots in `docs/images` use test data only. Full test output and
+additional screenshots are regenerated under the ignored `web/test-results` folder.
+The previous notes about physical authenticators, other browsers, security review,
+and large-library performance still apply.
+
+The visual review used [Awwwards' published scoring categories](https://www.awwwards.com/sites/str8fire),
+[Webby's judging criteria](https://www.webbyawards.com/judging-criteria/), and
+[FWA's emphasis on creative and technical excellence](https://thefwa.com/FWA25/25.html)
+as reference points. Passing these local checks is not an award certification.

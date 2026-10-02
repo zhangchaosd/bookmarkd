@@ -10,7 +10,7 @@ Your bookmarks, independent of your browser. A self-hosted, single-user web app 
 
 ![bookmarkd desktop interface](docs/images/desktop.png)
 
-Compact table browsing: name, folder, tags, and site domain. Rows are 32px by default or 28px in compact mode; phones switch to a card layout. Screenshots show demo data.
+An editorial personal archive with warm paper, terracotta accents, and Chinese serif typography. Up to three pinned bookmarks appear in the essentials shelf. Switch between list and card views, remembered on each device. List rows are 68px by default or 40px without notes in compact mode. The layout adapts to phones; batch actions use the list layout. Screenshots show isolated test data.
 
 ## Features
 
@@ -25,7 +25,7 @@ Manage folders directly in the sidebar: select ＋ next to “文件夹” to cr
 
 On desktop, drag a bookmark's left handle to another row's upper/lower edge to reorder, onto a sidebar folder to move it inside, or onto Inbox to move it out. Folders can also be dragged: the center nests them, the edges reorder siblings, and dropping on the “文件夹” heading (shown as “移至根目录” while dragging) moves them to the root. Changes save automatically. Clear search/tag filters before reordering; moving into folders remains available while filtered. On touch devices, use editing and batch moves.
 
-Choose Forest, Ocean, Iris, Amber, or Graphite under Settings → Browsing preferences. Each palette supports light, dark, and system appearance. Preview immediately, then select Save preferences to persist the choice.
+Choose Terracotta, Ocean, Iris, Amber, or Graphite under Settings → Browsing preferences. Each palette supports light, dark, and system appearance. Preview immediately, then select Save preferences to persist the choice.
 
 ## Download and run
 

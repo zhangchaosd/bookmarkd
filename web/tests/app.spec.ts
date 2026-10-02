@@ -12,8 +12,11 @@ function cli(...args: string[]) {
     encoding: 'utf8',
   });
 }
-async function start(conf = config, port = 8765) {
-  const proc = spawn(binary, ['--config', conf, 'serve'], { stdio: 'ignore' });
+async function start(conf = config, port = 18765) {
+  const proc = spawn(binary, ['--config', conf, 'serve'], {
+    stdio: 'ignore',
+    env: { ...process.env, BOOKMARKD_LISTEN: `127.0.0.1:${port}` },
+  });
   await expect
     .poll(async () => {
       try {
@@ -33,7 +36,7 @@ test.beforeAll(async () => {
     '--data-dir',
     data,
     '--public-url',
-    'http://localhost:8765',
+    'http://localhost:18765',
     '--rp-id',
     'localhost',
     '--allow-insecure-localhost',
@@ -202,7 +205,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   // Native mouse dragging: row order, folder membership, folder nesting and root moves.
   const sibling = (await api('/api/v1/folders', 'POST', { name: '工具' }))
     .value;
-  await page.goto('http://localhost:8765/library');
+  await page.goto('http://localhost:18765/library');
   const row = (title: string) =>
     page
       .locator('tbody tr')
@@ -330,7 +333,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await page.getByRole('button', { name: '保存更新设置' }).click();
   await expect(page.getByRole('status')).toContainText('更新设置已保存');
   for (const [id, name] of [
-    ['forest', '森林绿'],
+    ['forest', '陶土橙'],
     ['ocean', '海洋蓝'],
     ['violet', '鸢尾紫'],
     ['amber', '暖琥珀'],
@@ -363,7 +366,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'light');
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
-  await page.getByRole('radio', { name: '森林绿', exact: true }).check();
+  await page.getByRole('radio', { name: '陶土橙', exact: true }).check();
   await page.emulateMedia({ colorScheme: 'light' });
   await page.getByRole('button', { name: '保存偏好', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('偏好已保存');
@@ -383,14 +386,14 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
     '--data-dir',
     bdir,
     '--public-url',
-    'http://localhost:8766',
+    'http://localhost:18766',
     '--rp-id',
     'localhost',
     '--allow-insecure-localhost',
   ]);
   const bc = join(bdir, 'config.toml');
   let cfg = readFileSync(bc, 'utf8')
-    .replace('127.0.0.1:8765', '127.0.0.1:8766')
+    .replace('127.0.0.1:8765', '127.0.0.1:18766')
     .replace('app_id = "bookmarkd"', 'app_id = "second"')
     .replace(
       'store = "auth.db"',
@@ -402,15 +405,15 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
     )
     .replace('setup_mode = "auto"', 'setup_mode = "disabled"');
   writeFileSync(bc, cfg);
-  second = await start(bc, 8766);
+  second = await start(bc, 18766);
   await context.addCookies([
     {
       name: 'second_session',
       value: session.value,
-      url: 'http://localhost:8766',
+      url: 'http://localhost:18766',
     },
   ]);
-  await page.goto('http://localhost:8766/login');
+  await page.goto('http://localhost:18766/login');
   await expect(
     page.getByRole('button', { name: '使用 Passkey 登录', exact: true })
   ).toBeVisible();
@@ -442,7 +445,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
       })
     ).value.bookmarks
   ).toEqual(exported.bookmarks);
-  await page.goto('http://localhost:8765/library');
+  await page.goto('http://localhost:18765/library');
   await expect(page.getByRole('link', { name: '中文学习 Rust' })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });
@@ -475,7 +478,7 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   ).credentials[0];
   expect(Buffer.from(credential.userHandle, 'base64').length).toBe(32);
   cli('auth', 'revoke', '--', cli('auth', 'list').split('\t')[0]);
-  await page.goto('http://localhost:8766/library');
+  await page.goto('http://localhost:18766/library');
   await expect(
     page.getByRole('button', { name: '使用 Passkey 登录', exact: true })
   ).toBeVisible();
@@ -495,16 +498,16 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
     {
       name: 'bookmarkd_session',
       value: session.value,
-      url: 'http://localhost:8765',
+      url: 'http://localhost:18765',
     },
   ]);
-  await page.goto('http://localhost:8765/login');
+  await page.goto('http://localhost:18765/login');
   await expect(
     page.getByRole('button', { name: '使用 Passkey 登录', exact: true })
   ).toBeVisible();
   expect(
     (
-      await context.request.get('http://localhost:8765/api/v1/bookmarks')
+      await context.request.get('http://localhost:18765/api/v1/bookmarks')
     ).status()
   ).toBe(401);
   // Explicit auth rollback restores the old credential, as documented; fresh login is required.

@@ -1,0 +1,1300 @@
+/* Editorial archive: restrained paper, typographic hierarchy, precise controls. */
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+::selection {
+  background: var(--selected);
+  color: var(--accent);
+}
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color 0.18s,
+    border-color 0.18s,
+    color 0.18s,
+    box-shadow 0.18s;
+}
+button {
+  border-radius: 6px;
+  padding: 9px 14px;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button.primary {
+  box-shadow: 0 2px 3px #27251f08;
+}
+button.primary:hover {
+  border-color: var(--accent-hover);
+}
+input:not([type='checkbox']),
+select,
+textarea {
+  border-radius: 5px;
+  padding: 11px 12px;
+}
+input:not([type='checkbox']):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+}
+input[type='checkbox'] {
+  cursor: pointer;
+}
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  transform: translateY(-160%);
+  padding: 12px 20px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+.skip-link:focus {
+  transform: none;
+}
+.workspace:focus {
+  outline: none;
+}
+.loading-screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 22px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.loading-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 62px;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  animation: breathe 1.5s ease-in-out infinite alternate;
+}
+@keyframes breathe {
+  to {
+    opacity: 0.35;
+    transform: translateY(-4px);
+  }
+}
+aside {
+  width: 238px;
+  padding: 38px 19px 22px;
+  background: var(--sidebar);
+  z-index: 3;
+}
+.brand {
+  margin: 0 10px;
+  gap: 9px;
+  line-height: 1.1;
+  color: var(--text);
+}
+.brand-symbol {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 30px;
+  color: var(--accent);
+}
+.brand strong {
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -1.2px;
+}
+.brand strong > span {
+  color: var(--accent);
+}
+.brand-caption {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 14px 12px 44px;
+  letter-spacing: 0.8px;
+}
+.nav-label {
+  margin: 0 12px 12px;
+  color: var(--muted);
+  font-size: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+.nav-label span {
+  font: 8px var(--mono);
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+nav {
+  scrollbar-width: thin;
+  flex: 1;
+  min-height: 0;
+}
+nav > button {
+  font-size: 13px;
+  padding: 12px 14px;
+  margin: 4px 0;
+  gap: 11px;
+  border-radius: 5px;
+  min-height: 43px;
+  position: relative;
+}
+nav > button:hover {
+  background: var(--hover);
+}
+nav > button.active {
+  color: var(--accent);
+  background: var(--selected);
+  font-weight: 550;
+}
+nav > button.active:after {
+  content: '';
+  position: absolute;
+  right: 13px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+nav > button.active:has(.update-dot):after {
+  display: none;
+}
+.nav-section {
+  margin: 29px 4px 9px 12px;
+  font-size: 10px;
+}
+nav .folder-row .folder-nav {
+  font-size: 12px;
+  padding: 10px 4px;
+}
+.folder-row {
+  border-radius: 5px;
+}
+.nav-empty {
+  font-size: 11px;
+  line-height: 1.8;
+  margin: 10px 14px;
+}
+.aside-footer {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding: 21px 11px 0;
+}
+.private-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-size: 11px;
+}
+.private-note > span:last-child {
+  margin-left: auto;
+  color: var(--muted);
+}
+.private-dot,
+.local-status > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}
+.aside-footer p {
+  font-size: 10px;
+  margin: 8px 0 14px 12px;
+  color: var(--muted);
+}
+.aside-footer button {
+  width: auto;
+  padding: 6px 0;
+  border: none;
+  font-size: 10px;
+  margin: 0;
+  color: var(--muted);
+}
+.aside-footer button:hover {
+  color: var(--accent);
+}
+.workspace {
+  margin-left: 238px;
+  width: calc(100% - 238px);
+  padding: 0 46px;
+  max-width: 1800px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.workspace-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 77px;
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  font: 9px var(--mono);
+  letter-spacing: 1.2px;
+  color: var(--text);
+}
+.mobile-brand {
+  display: none;
+}
+.topline-slash {
+  padding: 0 13px;
+  color: var(--muted);
+}
+.topline-section {
+  color: var(--muted);
+}
+.local-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.page-header {
+  padding: 35px 0 32px;
+  margin: 0;
+  gap: 24px;
+}
+.section-number {
+  font: 9px var(--mono);
+  letter-spacing: 1.6px;
+  color: var(--accent);
+  margin-bottom: 13px;
+}
+.page-header h1 {
+  font-family: var(--serif);
+  font-size: 42px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -1.5px;
+  overflow-wrap: anywhere;
+}
+.page-description {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.6px;
+}
+.page-header .add-button {
+  font-size: 12px;
+  padding: 12px 18px;
+  gap: 9px;
+  align-self: center;
+}
+.collection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 17px;
+}
+.collection-heading h2 {
+  font-size: 14px;
+  font-weight: 550;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.collection-heading h2 span {
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font: 10px var(--mono);
+  min-width: 24px;
+  text-align: center;
+}
+.collection-caption {
+  font: 8px var(--mono);
+  letter-spacing: 1.35px;
+  color: var(--muted);
+}
+.toolbar {
+  gap: 10px;
+}
+.search {
+  border-radius: 5px;
+  padding: 0 13px;
+  gap: 10px;
+  background: color-mix(in srgb, var(--panel) 65%, var(--bg));
+  min-height: 43px;
+}
+.search input {
+  padding: 11px 0;
+  font-size: 12px;
+  box-shadow: none;
+}
+.search input::placeholder {
+  color: var(--muted);
+}
+.search kbd {
+  background: var(--bg);
+  border-radius: 3px;
+  font-size: 10px;
+  padding: 1px 5px;
+}
+.view-switch {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--sidebar);
+  gap: 1px;
+}
+.view-switch button {
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  padding: 8px 10px;
+  border-radius: 3px;
+  color: var(--muted);
+  background: transparent;
+}
+.view-switch button.chosen {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--panel);
+  box-shadow: 0 1px 3px #00000006;
+}
+.organize-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 11px;
+  min-height: 43px;
+}
+.list-heading {
+  margin: 12px 0 10px;
+  font-size: 10px;
+  min-height: 15px;
+}
+.bookmark-list {
+  max-height: none;
+  overflow-x: auto;
+  border-radius: 5px;
+  background: transparent;
+  border: 0;
+}
+.bookmark-table {
+  --row-height: 68px;
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+}
+.bookmark-table th {
+  position: static;
+  background: transparent;
+  height: 37px;
+  padding: 0 12px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+.bookmark-table th + th {
+  border-left: 0;
+}
+.bookmark-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+.bookmark-table .folder-column {
+  width: 17%;
+}
+.bookmark-table .tag-column {
+  width: 18%;
+}
+.bookmark-table .url-column {
+  width: 18%;
+}
+.bookmark:nth-child(even) {
+  background: transparent;
+}
+.bookmark {
+  transition: background 0.18s;
+}
+.bookmark:hover,
+.bookmark:focus-within {
+  background: var(--hover);
+}
+.bookmark.selected {
+  background: var(--selected);
+}
+.name-cell {
+  position: relative;
+  gap: 10px;
+}
+.drag-handle {
+  flex-basis: 10px;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.bookmark:hover .drag-handle,
+.bookmark:focus-within .drag-handle {
+  opacity: 0.65;
+}
+.bookmark-link {
+  gap: 11px;
+  flex: 1;
+  font-weight: 500;
+  min-width: 0;
+}
+.bookmark-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+.bookmark-title {
+  font-size: 13px;
+  line-height: 1.4;
+  display: block;
+}
+.bookmark-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  line-height: 1.4;
+}
+.site-icon {
+  width: 29px;
+  height: 32px;
+  flex: 0 0 29px;
+  border-radius: 5px;
+  font:
+    500 15px Georgia,
+    serif;
+  background: color-mix(in srgb, var(--panel) 65%, var(--selected));
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.bookmark:nth-child(3n + 1) .site-icon {
+  color: var(--accent);
+  background: var(--selected);
+}
+.pin {
+  color: var(--accent);
+}
+.folder-link {
+  font-size: 11px;
+  gap: 5px;
+}
+.url {
+  font: 11px var(--mono);
+}
+.tags {
+  gap: 4px;
+}
+.tags button {
+  font-size: 10px;
+  line-height: 18px;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--sidebar);
+}
+.item-actions {
+  position: absolute;
+  right: 0;
+  padding: 4px 2px 4px 8px;
+  background: var(--hover);
+  border-radius: 5px;
+  pointer-events: none;
+}
+.bookmark:hover .item-actions,
+.bookmark:focus-within .item-actions,
+.organizing .item-actions {
+  pointer-events: auto;
+}
+.item-actions button {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+}
+.organizing .item-actions {
+  position: static;
+  background: transparent;
+  padding: 0;
+}
+.organizing .bookmark-link {
+  min-width: 80px;
+}
+.organizing .bookmark-table {
+  min-width: 780px;
+}
+[data-density='compact'] .bookmark-table {
+  --row-height: 40px;
+}
+[data-density='compact'] .bookmark-note {
+  display: none;
+}
+[data-density='compact'] .site-icon {
+  width: 22px;
+  height: 24px;
+  flex-basis: 22px;
+  font-size: 12px;
+}
+.workspace-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 25px 0 24px;
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 9px;
+}
+.workspace-footer > span:last-child {
+  font: 8px var(--mono);
+  letter-spacing: 1px;
+}
+.workspace-footer i {
+  font-style: normal;
+  padding: 0 7px;
+  color: var(--accent);
+}
+/* The alternate card layout reuses the same links and actions. */
+.gallery .bookmark-table,
+.gallery .bookmark-table tbody {
+  display: block;
+  border: 0;
+}
+.gallery .bookmark-table thead,
+.gallery .bookmark-table colgroup {
+  display: none;
+}
+.gallery .bookmark-table tbody {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+  padding: 3px 0 8px;
+}
+.gallery tr.bookmark {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 20px;
+  background: var(--panel);
+  position: relative;
+  transition:
+    transform 0.2s,
+    border-color 0.2s;
+}
+.gallery tr.bookmark:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+.gallery .bookmark-table td {
+  display: block;
+  border: 0;
+  padding: 0;
+  height: auto;
+}
+.gallery .name-cell {
+  align-items: flex-start;
+}
+.gallery .drag-handle {
+  position: absolute;
+  left: -16px;
+  top: 10px;
+}
+.gallery .bookmark-link {
+  height: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  padding-bottom: 14px;
+}
+.gallery .site-icon {
+  width: 35px;
+  height: 38px;
+  flex-basis: 38px;
+  font-size: 18px;
+}
+.gallery .bookmark-title {
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  height: 48px;
+}
+.gallery .bookmark-copy {
+  width: 100%;
+  gap: 6px;
+}
+.gallery .bookmark-note {
+  font-size: 11px;
+  height: 17px;
+}
+.gallery .pin {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.gallery .item-actions {
+  top: 30px;
+  right: 0;
+}
+.gallery .folder-td {
+  margin: 0 0 10px;
+}
+.gallery .tags {
+  height: 24px;
+  margin-bottom: 12px;
+}
+.gallery .url-td {
+  margin-top: auto;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--border) !important;
+}
+.gallery .bookmark-table {
+  --row-height: auto;
+}
+/* Empty, feedback, forms, settings. */
+.empty {
+  padding: 45px 20px 65px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  margin-top: 4px;
+}
+.empty-illustration {
+  height: 100px;
+  width: 135px;
+  position: relative;
+  margin: 0 auto 20px;
+}
+.empty-illustration > span {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  width: 62px;
+  height: 80px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 4px;
+  top: 10px;
+  left: 36px;
+  transform: rotate(-18deg) translateX(-17px);
+}
+.empty-illustration > span:nth-child(2) {
+  transform: rotate(17deg) translateX(17px);
+  background: var(--selected);
+}
+.empty-illustration > span:last-child {
+  transform: none;
+  color: var(--accent);
+}
+.empty h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 23px;
+}
+.empty p {
+  font-size: 12px;
+  max-width: 440px;
+  margin: 12px auto 20px;
+  line-height: 1.9;
+}
+.empty button {
+  font-size: 12px;
+  padding: 11px 18px;
+}
+.banner {
+  font-size: 12px;
+  padding: 11px 15px;
+  margin: 0 0 18px;
+  border-radius: 5px;
+  border-left: 3px solid var(--accent);
+}
+.banner.error {
+  border-left-color: var(--danger);
+}
+.banner[role='status'] {
+  position: fixed;
+  bottom: 24px;
+  right: 28px;
+  z-index: 8;
+  min-width: 220px;
+  max-width: calc(100vw - 40px);
+  margin: 0;
+  gap: 28px;
+  box-shadow: 0 8px 30px #24292116;
+  animation: dialog-in 0.2s ease-out;
+}
+.banner button {
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  background: transparent;
+}
+.batch {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  margin-top: 14px;
+}
+.batch label {
+  margin: 0;
+}
+.settings-grid {
+  gap: 20px;
+  padding-bottom: 24px;
+}
+.panel {
+  border-radius: 6px;
+  padding: 28px;
+}
+.panel h2 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  padding-bottom: 17px;
+  border-bottom: 1px solid var(--border);
+}
+.panel p {
+  line-height: 1.85;
+}
+.panel label {
+  font-size: 12px;
+}
+.panel button {
+  font-size: 12px;
+}
+.editor {
+  padding: 32px;
+  border-radius: 9px;
+  max-height: calc(100dvh - 40px);
+  width: min(560px, calc(100vw - 32px));
+  box-shadow: 0 24px 100px #16191435;
+  animation: dialog-in 0.22s ease-out;
+}
+.dialog-heading {
+  margin-bottom: 23px;
+}
+.dialog-heading h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 29px;
+  letter-spacing: -0.6px;
+}
+.dialog-kicker {
+  font: 9px var(--mono);
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+.dialog-heading .icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.editor label {
+  font-size: 12px;
+  margin: 17px 0;
+}
+.editor .form-grid label {
+  margin: 0;
+}
+.editor input,
+.editor textarea,
+.editor select {
+  font-size: 13px;
+}
+.dialog-footer {
+  margin-top: 25px;
+  padding-top: 22px;
+}
+.dialog-footer button {
+  font-size: 12px;
+  min-width: 76px;
+}
+.overlay {
+  background: transparent;
+  backdrop-filter: none;
+}
+dialog::backdrop {
+  background: #1d201e58;
+  backdrop-filter: blur(5px);
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.folder-menu {
+  border-radius: 6px;
+  padding: 6px;
+}
+.folder-menu button {
+  min-height: 36px;
+}
+.dropzone {
+  border-radius: 5px;
+}
+.filter-chip {
+  border-radius: 4px;
+  font-size: 11px;
+}
+@media (min-width: 1600px) {
+  .workspace {
+    padding: 0 64px;
+  }
+  .page-header {
+    padding: 43px 0 39px;
+  }
+  .page-header h1 {
+    font-size: 48px;
+  }
+}
+@media (max-width: 1150px) {
+  aside {
+    width: 212px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .workspace {
+    margin-left: 212px;
+    width: calc(100% - 212px);
+    padding: 0 28px;
+  }
+  .gallery .bookmark-table tbody {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .url-column {
+    width: 17%;
+  }
+  .local-status {
+    display: none;
+  }
+  .bookmark-table td {
+    padding: 0 8px;
+  }
+  .bookmark-note {
+    max-width: 220px;
+  }
+  .bookmark-table .tag-column {
+    width: 17%;
+  }
+}
+@media (max-width: 850px) and (min-width: 701px) {
+  aside {
+    width: 190px;
+  }
+  .workspace {
+    margin-left: 190px;
+    width: calc(100% - 190px);
+    padding: 0 22px;
+  }
+  .brand strong {
+    font-size: 23px;
+  }
+  .brand-caption {
+    font-size: 10px;
+  }
+  .nav-label span {
+    display: none;
+  }
+  .collection-caption {
+    display: none;
+  }
+  .page-header h1 {
+    font-size: 36px;
+  }
+  .bookmark-table .url-column {
+    width: 0;
+  }
+  .bookmark-table .url-td,
+  .bookmark-table th:last-child {
+    display: none;
+  }
+  .bookmark-table .tag-column {
+    width: 22%;
+  }
+  .bookmark-table .folder-column {
+    width: 23%;
+  }
+  .gallery .bookmark-table .url-td {
+    display: block;
+  }
+  .workspace-footer > span:last-child {
+    font-size: 7px;
+  }
+}
+@media (max-width: 700px) {
+  aside {
+    width: min(280px, 86vw);
+    padding: 30px 20px;
+    z-index: 7;
+    transition: transform 0.25s ease;
+  }
+  aside:not(.open) {
+    visibility: hidden;
+  }
+  aside.open {
+    visibility: visible;
+  }
+  .scrim {
+    z-index: 6;
+    background: #171b1745;
+    backdrop-filter: blur(3px);
+  }
+  .workspace {
+    width: 100%;
+    margin: 0;
+    padding: 0 22px;
+  }
+  .workspace-topline .desktop-breadcrumb {
+    display: none;
+  }
+  .mobile-brand {
+    display: block;
+    font:
+      650 22px -apple-system,
+      BlinkMacSystemFont,
+      sans-serif;
+    letter-spacing: -1px;
+  }
+  .mobile-brand span {
+    color: var(--accent);
+  }
+  .workspace-topline {
+    min-height: 57px;
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .topline-slash {
+    padding: 0 8px;
+  }
+  .page-header {
+    padding: 26px 0 29px;
+    gap: 12px;
+    position: relative;
+    flex-wrap: wrap;
+  }
+  .page-heading {
+    flex: 1;
+    min-width: 0;
+  }
+  .section-number {
+    font-size: 8px;
+    letter-spacing: 1.25px;
+    margin-bottom: 8px;
+  }
+  .page-header h1 {
+    font-size: 34px;
+    letter-spacing: -1px;
+  }
+  .page-description {
+    font-size: 11px;
+    letter-spacing: 0.2px;
+    margin-top: 8px;
+  }
+  .mobile-toggle {
+    position: absolute;
+    right: 0;
+    top: -46px;
+    border: 0;
+    background: transparent;
+    width: 36px;
+    height: 36px;
+    color: var(--muted);
+  }
+  .page-header .add-button {
+    padding: 10px 12px;
+    font-size: 11px;
+    gap: 6px;
+    align-self: center;
+  }
+  .collection-heading {
+    margin-bottom: 13px;
+  }
+  .collection-caption {
+    display: none;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .search {
+    flex: 1 1 100%;
+    min-height: 43px;
+  }
+  .search kbd {
+    display: block;
+  }
+  .view-switch {
+    margin-left: auto;
+  }
+  .organize-button {
+    min-height: 39px;
+  }
+  .view-switch button {
+    padding: 6px 11px;
+  }
+  .list-heading {
+    margin: 10px 0;
+  }
+  .bookmark-list {
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .bookmark-table {
+    border-top: 0;
+  }
+  .bookmark-table tr.bookmark {
+    padding: 16px 0;
+    gap: 7px 8px;
+    min-width: 0;
+  }
+  .bookmark-table td {
+    border-bottom: 0;
+  }
+  .bookmark-table td.name-td {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .bookmark-table td.url-td {
+    padding-left: 40px;
+    max-width: 64%;
+  }
+  .bookmark-table td.tag-td {
+    padding-left: 40px;
+  }
+  .name-cell {
+    gap: 10px;
+    width: 100%;
+  }
+  .bookmark-link {
+    height: auto;
+    min-height: 40px;
+    gap: 10px;
+    max-width: 100%;
+  }
+  .bookmark-title {
+    font-size: 13px;
+  }
+  .bookmark-note {
+    max-width: none;
+    font-size: 10px;
+  }
+  .site-icon {
+    width: 30px;
+    height: 33px;
+    flex-basis: 30px;
+  }
+  .drag-handle {
+    display: none;
+  }
+  .item-actions {
+    position: static;
+    opacity: 1;
+    pointer-events: auto;
+    padding: 0;
+    background: transparent;
+    gap: 0;
+  }
+  .item-actions button {
+    width: 32px;
+    height: 40px;
+  }
+  .url {
+    font-size: 9px;
+  }
+  .tags {
+    gap: 5px;
+    flex-wrap: wrap;
+    height: auto;
+  }
+  .tags button {
+    font-size: 10px;
+    padding: 2px 7px;
+  }
+  .bookmark-table .folder-link {
+    font-size: 11px;
+  }
+  .gallery {
+    border-top: 0;
+  }
+  .gallery .bookmark-table tbody {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .gallery tr.bookmark {
+    padding: 15px;
+    gap: 0;
+  }
+  .gallery .bookmark-link {
+    min-height: 0;
+    padding-bottom: 12px;
+  }
+  .gallery .bookmark-title {
+    font-size: 13px;
+    height: 42px;
+  }
+  .gallery .bookmark-note {
+    height: 14px;
+    font-size: 9px;
+  }
+  .gallery .name-cell {
+    display: block;
+  }
+  .gallery .item-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    opacity: 1;
+  }
+  .gallery .item-actions button {
+    width: 27px;
+    height: 32px;
+  }
+  .gallery .pin {
+    top: 42px;
+    right: 0;
+  }
+  .gallery .bookmark-table td.url-td {
+    max-width: 100%;
+    padding-left: 0;
+  }
+  .gallery .bookmark-table td.tag-td {
+    padding: 0;
+  }
+  .gallery .tags {
+    min-height: 25px;
+  }
+  .gallery .url-td {
+    font-size: 8px;
+  }
+  .organizing .bookmark-table {
+    min-width: 0;
+  }
+  .organizing .name-cell {
+    flex-wrap: wrap;
+  }
+  .organizing .bookmark-link {
+    min-width: 0;
+  }
+  .organizing .item-actions {
+    margin-left: 26px;
+    flex: 1 1 100%;
+  }
+  .organizing .item-actions button {
+    width: 38px;
+    height: 36px;
+  }
+  .workspace-footer {
+    padding: 27px 0 22px;
+    align-items: center;
+    font-size: 9px;
+  }
+  .workspace-footer > span:last-child {
+    font-size: 7px;
+    letter-spacing: 0.4px;
+  }
+  .workspace-footer i {
+    padding: 0 3px;
+  }
+  .panel {
+    padding: 22px;
+  }
+  .panel h2 {
+    font-size: 21px;
+  }
+  .settings-grid {
+    gap: 14px;
+  }
+  .editor {
+    padding: 24px;
+    max-height: calc(100dvh - 28px);
+  }
+  .editor .form-grid {
+    gap: 16px;
+  }
+  .editor label {
+    margin: 16px 0;
+  }
+  .dialog-heading h2 {
+    font-size: 25px;
+  }
+  .dialog-heading {
+    margin-bottom: 20px;
+  }
+  .empty {
+    padding: 30px 18px 40px;
+  }
+  .empty h2 {
+    font-size: 22px;
+  }
+  [data-density='compact'] .bookmark-table tr.bookmark {
+    padding: 10px 0;
+  }
+  [data-density='compact'] .gallery tr.bookmark {
+    padding: 15px;
+  }
+}
+@media (max-width: 370px) {
+  .workspace {
+    padding: 0 16px;
+  }
+  .page-header .add-button {
+    font-size: 10px;
+    padding: 9px;
+  }
+  .page-header h1 {
+    font-size: 29px;
+  }
+  .page-description {
+    font-size: 10px;
+  }
+  .workspace-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .gallery .bookmark-table tbody {
+    grid-template-columns: 1fr;
+  }
+}
+@media (hover: none) {
+  .item-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .folder-more {
+    opacity: 1 !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
