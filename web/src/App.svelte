@@ -76,6 +76,18 @@
     }
   }
   let highlights: Bookmark[] = [];
+  // Bookmarks shown on the pinned shelf are not repeated in the list below it.
+  $: showShelf =
+    view === 'library' &&
+    folder === 'all' &&
+    !query &&
+    !tag &&
+    !organize &&
+    offset === 0 &&
+    highlights.length > 0;
+  $: listed = showShelf
+    ? bookmarks.filter((b) => !highlights.some((h) => h.id === b.id))
+    : bookmarks;
   let organize = false,
     selected: string[] = [],
     mobileNav = false,
@@ -109,7 +121,8 @@
       new_tab: true,
     };
   const palettes = [
-    { id: 'forest', name: '陶土橙', color: '#b84d2d' },
+    { id: 'terracotta', name: '陶土橙', color: '#b84d2d' },
+    { id: 'forest', name: '森林绿', color: '#397753' },
     { id: 'ocean', name: '海洋蓝', color: '#2563a6' },
     { id: 'violet', name: '鸢尾紫', color: '#7651a8' },
     { id: 'amber', name: '暖琥珀', color: '#956014' },
@@ -245,7 +258,8 @@
     channel: BroadcastChannel | undefined;
   let searchTimer: ReturnType<typeof setTimeout>;
   $: document.documentElement.dataset.theme = preferences.theme;
-  $: document.documentElement.dataset.palette = preferences.palette || 'forest';
+  $: document.documentElement.dataset.palette =
+    preferences.palette || 'terracotta';
   $: document.documentElement.dataset.density = preferences.density;
   $: bookmarklet = `javascript:(()=>{const u=new URL('/capture',${JSON.stringify(location.origin)});u.searchParams.set('url',location.href);u.searchParams.set('title',document.title);window.open(u,'_blank','noopener,noreferrer')})()`;
   function modal(node: HTMLDialogElement, onClose: () => void) {
@@ -588,6 +602,9 @@
     if (target.kind === 'bookmark') {
       if (dragged.kind !== 'bookmarks' || query.trim() || tag) return null;
       const rect = node.getBoundingClientRect();
+      // Cards flow left to right, so the card view orders by horizontal halves.
+      if (node.closest('.gallery'))
+        return event.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
       return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
     }
     if (dragged.kind === 'bookmarks') return 'inside';
@@ -1189,14 +1206,14 @@
           class:active={view === 'settings'}
           on:click={() => nav('settings')}
           ><Icon name="settings" size={16} /> 设置与迁移{#if updateInfo?.available}<span
-              class="update-dot"
-              title={'有新版本 v' + updateInfo.latest?.version}
-            ></span>{/if}</button
+              class="update-badge"
+              title={'有新版本 v' + updateInfo.latest?.version}>有更新</span
+            >{/if}</button
         >
       </nav>
       <div class="aside-footer">
         <div class="private-note">
-          <span class="private-dot"></span> 私人收藏空间 <span>↗</span>
+          <span class="private-dot"></span> 私人收藏空间
         </div>
         <p>悉心收集，自在探索。</p>
         <button on:click={() => run(logout)}
@@ -1338,14 +1355,15 @@
                 {#each palettes as palette}
                   <label
                     class="palette-option"
-                    class:chosen={(preferences.palette || 'forest') ===
+                    class:chosen={(preferences.palette || 'terracotta') ===
                       palette.id}
                   >
                     <input
                       type="radio"
                       name="palette"
                       value={palette.id}
-                      checked={(preferences.palette || 'forest') === palette.id}
+                      checked={(preferences.palette || 'terracotta') ===
+                        palette.id}
                       on:change={() => (preferences.palette = palette.id)}
                     />
                     <span
@@ -1676,8 +1694,12 @@
           </section>
         </div>
       {:else}
-        {#if view === 'library' && folder === 'all' && !query && !tag && !organize && offset === 0 && highlights.length}
-          <PinnedShelf items={highlights} newTab={preferences.new_tab} />
+        {#if showShelf}
+          <PinnedShelf
+            items={highlights}
+            newTab={preferences.new_tab}
+            onEdit={(item) => edit(item as Bookmark)}
+          />
         {/if}
         <div class="collection-heading">
           <h2>
@@ -1813,7 +1835,7 @@
           class="bookmark-list"
           class:organizing={organize}
           class:gallery={layout === 'grid' && !organize && view === 'library'}
-          hidden={!bookmarks.length}
+          hidden={!listed.length}
           aria-busy={busy}
         >
           <table
@@ -1835,7 +1857,7 @@
               ></thead
             >
             <tbody>
-              {#each bookmarks as b (b.id)}
+              {#each listed as b (b.id)}
                 <tr
                   use:dragSource={view === 'library'
                     ? {

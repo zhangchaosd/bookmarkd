@@ -1,6 +1,6 @@
-/* Paper, ink, and a single accent. Palette IDs remain stable for saved preferences. */
+/* Paper, ink, and a single accent. Terracotta is the default; saved IDs keep their colors. */
 :root,
-:root[data-palette='forest'] {
+:root[data-palette='terracotta'] {
   --light-bg: #f7f5ef;
   --light-panel: #fffefa;
   --light-sidebar: #efeee7;
@@ -25,6 +25,14 @@
   --dark-hover: #2c2f27;
   --dark-danger: #f29a91;
   --dark-on-accent: #211b16;
+}
+:root[data-palette='forest'] {
+  --light-accent: #397753;
+  --light-accent-hover: #2d6344;
+  --light-selected: #e4efdf;
+  --dark-accent: #8dc99a;
+  --dark-accent-hover: #a5dcaf;
+  --dark-selected: #2a3d2d;
 }
 :root[data-palette='ocean'] {
   --light-accent: #32688a;

@@ -275,13 +275,16 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
   }
 
   const rows = page.locator('.bookmark-table tbody tr.bookmark');
+  // The first three entries are pinned; the shelf shows them instead of the list.
+  const shelved = entries.slice(0, 3).map((entry) => entry.title);
+  const listed = entries.length - shelved.length;
   const rowFor = (title: string) =>
     rows.filter({ has: page.locator('.bookmark-title', { hasText: title }) });
   const waitForLibrary = async () => {
     await expect(
       page.getByRole('heading', { level: 1, name: '全部收藏', exact: true })
     ).toBeVisible();
-    await expect(rows).toHaveCount(entries.length);
+    await expect(rows).toHaveCount(listed);
     await expect(page.locator('.bookmark-list')).toHaveAttribute(
       'aria-busy',
       'false'
@@ -297,6 +300,20 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(rowFor(longTitle)).toHaveCount(1);
   await expect(rowFor(longTitle).locator('.tags button')).toHaveCount(5);
+  for (const title of shelved) await expect(rowFor(title)).toHaveCount(0);
+  const shelf = page.getByRole('region', { name: '精选置顶' });
+  await shelf.getByRole('button', { name: '编辑 ' + shelved[0] }).click();
+  const shelfEditor = page.getByRole('dialog', { name: '编辑收藏' });
+  await expect(shelfEditor.getByLabel('标题', { exact: true })).toHaveValue(
+    shelved[0]
+  );
+  await page.keyboard.press('Escape');
+  await expect(shelfEditor).toHaveCount(0);
+  await page.getByRole('button', { name: '批量操作' }).click();
+  await expect(shelf).toHaveCount(0);
+  await expect(rows).toHaveCount(entries.length);
+  await page.getByRole('button', { name: '完成' }).click();
+  await waitForLibrary();
   await page.screenshot({
     path: 'test-results/design-desktop.png',
     fullPage: false,
@@ -311,6 +328,34 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
     page.getByRole('button', { name: '卡片视图', exact: true })
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.bookmark-list')).toHaveClass(/gallery/);
+  // Cards sit side by side, so dropping on a card's left/right half orders before/after.
+  {
+    const source = rows.nth(0);
+    const target = rows.nth(1);
+    await source.hover();
+    const from = (await source.locator('.drag-handle').boundingBox())!;
+    const to = (await target.boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      from.x + from.width / 2 + 12,
+      from.y + from.height / 2 + 3
+    );
+    for (const [fraction, placement] of [
+      [0.8, 'after'],
+      [0.2, 'before'],
+    ] as const) {
+      const x = to.x + to.width * fraction,
+        y = to.y + to.height * 0.5;
+      await page.mouse.move(x, y, { steps: 8 });
+      await page.mouse.move(x + 1, y + 1);
+      await expect(target).toHaveAttribute('data-drop', placement);
+    }
+    // Release outside any drop target so the order is left unchanged.
+    await page.mouse.move(5, 5, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.locator('[data-dragging]')).toHaveCount(0);
+  }
   await page.screenshot({
     path: 'test-results/design-grid.png',
     fullPage: false,
@@ -456,7 +501,8 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
   const theme = page.getByLabel('明暗模式');
   await expect(theme).toBeEnabled();
   for (const [id, name] of [
-    ['forest', '陶土橙'],
+    ['terracotta', '陶土橙'],
+    ['forest', '森林绿'],
     ['ocean', '海洋蓝'],
     ['violet', '鸢尾紫'],
     ['amber', '暖琥珀'],
@@ -545,7 +591,7 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
   await noHorizontalOverflow(page, '320px bookmark editor');
   await editor.getByRole('button', { name: '保存收藏', exact: true }).click();
   await expect(editor).toHaveCount(0);
-  await expect(rows).toHaveCount(entries.length + 1);
+  await expect(rows).toHaveCount(listed + 1);
   await expect(rowFor('慢慢看，慢慢收藏')).toBeVisible();
   await rowFor('慢慢看，慢慢收藏')
     .getByRole('button', { name: '编辑 慢慢看，慢慢收藏', exact: true })
@@ -566,7 +612,7 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
   await expect(editDialog).toHaveCount(0);
   await page.reload();
   await expect(rowFor('慢慢看，慢慢收藏 · 已整理')).toBeVisible();
-  await expect(rows).toHaveCount(entries.length + 1);
+  await expect(rows).toHaveCount(listed + 1);
   // Logging out from the open mobile sidebar must release its focus trap.
   await page.getByRole('button', { name: '打开导航', exact: true }).click();
   await page.getByRole('button', { name: '退出登录', exact: true }).click();

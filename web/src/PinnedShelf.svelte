@@ -1,13 +1,16 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  export let items: {
+  type Item = {
     id: string;
     title: string;
     url_raw: string;
     notes: string;
     tags: string[];
-  }[] = [];
+  };
+  export let items: Item[] = [];
   export let newTab = true;
+  // Shelf items are left out of the list below, so editing must be reachable here.
+  export let onEdit: (item: Item) => void = () => {};
   function domain(url: string) {
     try {
       return new URL(url).hostname.replace(/^www\./, '');
@@ -26,19 +29,27 @@
   </div>
   <div class="shelf-grid">
     {#each items as item, i (item.id)}
-      <a
-        class="shelf-card"
-        href={item.url_raw}
-        target={newTab ? '_blank' : '_self'}
-        rel="noopener noreferrer"
-        aria-label={'打开置顶收藏：' + item.title}
-      >
+      <article class="shelf-card">
         <div class="card-top">
           <span class="card-domain">{domain(item.url_raw)}</span><span
-            class="card-arrow">↗</span
+            class="card-actions"
+            ><button
+              class="card-edit"
+              title="编辑收藏"
+              aria-label={'编辑 ' + item.title}
+              on:click={() => onEdit(item)}><Icon name="edit" /></button
+            ><span class="card-arrow" aria-hidden="true">↗</span></span
           >
         </div>
-        <h2>{item.title}</h2>
+        <h2>
+          <a
+            class="card-link"
+            href={item.url_raw}
+            target={newTab ? '_blank' : '_self'}
+            rel="noopener noreferrer"
+            aria-label={'打开置顶收藏：' + item.title}>{item.title}</a
+          >
+        </h2>
         <div class="card-bottom">
           <span>{item.tags[0] || '值得再次打开'}</span><span class="card-index"
             >0{i + 1}</span
@@ -47,7 +58,7 @@
         <div class="card-art" aria-hidden="true">
           <i></i><i></i><i></i><i></i>
         </div>
-      </a>
+      </article>
     {/each}
   </div>
 </section>
@@ -120,6 +131,62 @@
     position: relative;
     z-index: 1;
   }
+  /* The title link covers the card; only the edit button sits above it. */
+  .card-top {
+    z-index: 2;
+  }
+  .card-top,
+  .card-bottom {
+    pointer-events: none;
+  }
+  .card-link {
+    color: inherit;
+  }
+  .card-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+  .card-link:focus-visible {
+    outline: none;
+  }
+  .shelf-card:has(.card-link:focus-visible) {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-edit {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    opacity: 0;
+    pointer-events: auto;
+    transition: opacity 0.2s;
+  }
+  .shelf-card:hover .card-edit,
+  .card-edit:focus-visible {
+    opacity: 0.85;
+  }
+  .card-edit:hover {
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .card-edit {
+      opacity: 0.85;
+    }
+  }
   .card-domain {
     font: 10px var(--mono, monospace);
     opacity: 0.75;
@@ -136,8 +203,7 @@
     transform: translate(2px, -2px);
   }
   h2 {
-    position: relative;
-    z-index: 1;
+    position: static;
     font-size: 18px;
     font-weight: 500;
     line-height: 1.5;

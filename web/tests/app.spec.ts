@@ -333,7 +333,8 @@ test('Passkey, private library, conflicts, migration, shared host and recovery',
   await page.getByRole('button', { name: '保存更新设置' }).click();
   await expect(page.getByRole('status')).toContainText('更新设置已保存');
   for (const [id, name] of [
-    ['forest', '陶土橙'],
+    ['terracotta', '陶土橙'],
+    ['forest', '森林绿'],
     ['ocean', '海洋蓝'],
     ['violet', '鸢尾紫'],
     ['amber', '暖琥珀'],

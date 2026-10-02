@@ -113,22 +113,23 @@ and strict Clippy passed. Current frontend assets are approximately 79 KiB JS
 
 ## Editorial archive redesign — 2026-10-02
 
-This redesign replaces the earlier compact UI described above. The working branch
-is `codex/ui-editorial-redesign`. The visual direction is a private archive: warm
+This redesign replaces the earlier compact UI described above. The visual direction is a private archive: warm
 paper surfaces, ink typography, terracotta accents, Chinese serif headings, and
 original SVG bookmark artwork. Existing authentication and business APIs remain
 in use; no remote fonts, images, or new runtime dependencies are required.
 
 The library now has a three-item pinned shelf fetched in pinned order independently
-of ordinary pagination, device-persistent list/card views, visible bookmark notes,
-68px comfortable rows, and 40px compact rows. Batch operations retain the list
-layout. Login, setup, settings, dialogs, empty states, notifications, mobile
-navigation, and all five light/dark palettes use the same visual language.
+of ordinary pagination; bookmarks on the shelf are not repeated in the list below and
+can be edited from their card. List and card views persist per device; the card view
+reorders by left/right halves. Rows are 52px (room for one line of notes) or 36px in
+compact mode without notes. Batch operations show the full list without the shelf.
+Login, setup, settings, dialogs, empty states, notifications, mobile navigation, and
+all six light/dark palettes use the same visual language. Terracotta is the default
+palette; the earlier Forest green remains available under its original ID, so saved
+preferences keep their colors. The active navigation item is marked with a bar, and
+available updates with a text badge.
 
-Three review passes covered composition and hierarchy, real browser behavior, and
-an independent code/accessibility review. Follow-up fixes included readable metadata,
-mobile card domain spacing, pinned pagination/order, restored preferences immediately
-after login, and mobile navigation focus handling. The mobile menu now traps focus,
+Preferences are restored immediately after login. The mobile menu traps focus,
 marks the workspace inert, supports keyboard access to folder actions, returns focus
 on Escape, and releases its focus scope on logout. Reduced-motion preferences disable
 nonessential movement.
@@ -151,7 +152,7 @@ npm test --prefix web
   editing, saved/system appearance, menu Tab/arrow-key navigation, and mobile logout.
 - List and card layouts have no document-level horizontal overflow at 320, 390,
   768, 1024, and 1440px. Settings are checked at those widths for every combination
-  of five palettes and light/dark appearance. Mobile login and the 320px editor
+  of six palettes and light/dark appearance. Mobile login and the 320px editor
   also fit their viewports. Long bilingual titles and five-tag bookmarks are included.
 - The browser tests assert zero uncaught page errors. Default light text contrast
   is 13.71:1; muted text is 5.14:1; the terracotta button with white text is 5.08:1.
@@ -162,8 +163,3 @@ Updated screenshots in `docs/images` use test data only. Full test output and
 additional screenshots are regenerated under the ignored `web/test-results` folder.
 The previous notes about physical authenticators, other browsers, security review,
 and large-library performance still apply.
-
-The visual review used [Awwwards' published scoring categories](https://www.awwwards.com/sites/str8fire),
-[Webby's judging criteria](https://www.webbyawards.com/judging-criteria/), and
-[FWA's emphasis on creative and technical excellence](https://thefwa.com/FWA25/25.html)
-as reference points. Passing these local checks is not an award certification.
