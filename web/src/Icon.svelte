@@ -1,6 +1,7 @@
 <script lang="ts">
   export let name:
     | 'list'
+    | 'desktop'
     | 'sliders'
     | 'copy'
     | 'edit'
@@ -38,7 +39,10 @@
   aria-hidden="true"
   focusable="false"
 >
-  {#if name === 'list'}
+  {#if name === 'desktop'}
+    <rect x="3" y="4" width="18" height="13" rx="2" />
+    <path d="M8 21h8M12 17v4M7 8h2M11 8h2M7 12h2" />
+  {:else if name === 'list'}
     <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
   {:else if name === 'sliders'}
     <path d="M3 7h5m4 0h9M3 17h9m4 0h5" /><circle cx="10" cy="7" r="2" /><circle

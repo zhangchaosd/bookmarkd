@@ -40,6 +40,10 @@ pub struct Bookmark {
     pub deleted_at: Option<i64>,
     #[serde(default)]
     pub deletion_batch: Option<String>,
+    /// Site icon as a `data:image/...;base64,` URI; the page CSP only allows
+    /// same-origin and data images, so icons are stored rather than linked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Folder {
@@ -97,6 +101,30 @@ pub fn valid_url(raw: &str) -> Result<url::Url> {
     );
     Ok(u)
 }
+pub const ICON_LIMIT: usize = 96 * 1024;
+const ICON_TYPES: [&str; 8] = [
+    "png",
+    "x-icon",
+    "vnd.microsoft.icon",
+    "gif",
+    "jpeg",
+    "webp",
+    "svg+xml",
+    "avif",
+];
+/// Accepts only bounded base64 image data URIs.
+pub fn valid_icon(s: &str) -> bool {
+    s.len() <= ICON_LIMIT
+        && s.strip_prefix("data:image/")
+            .and_then(|rest| rest.split_once(";base64,"))
+            .is_some_and(|(kind, data)| {
+                ICON_TYPES.contains(&kind)
+                    && !data.is_empty()
+                    && data
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || b"+/=".contains(&c))
+            })
+}
 pub fn name(s: &str) -> Result<()> {
     ensure!(
         !s.trim().is_empty() && s.chars().count() <= 128,
@@ -123,6 +151,7 @@ impl Bookmark {
             original_created_at: None,
             deleted_at: None,
             deletion_batch: None,
+            icon: None,
         };
         b.patch(v)?;
         Ok(b)
@@ -146,6 +175,9 @@ impl Bookmark {
         if let Some(b) = v.get("pinned") {
             self.pinned = b.as_bool().unwrap_or(false);
         }
+        if let Some(s) = v.get("icon") {
+            self.icon = s.as_str().filter(|s| !s.is_empty()).map(String::from);
+        }
         let mut seen = HashSet::new();
         self.tags.retain(|t| seen.insert(normalize(t.trim())));
         let u = valid_url(&self.url_raw)?;
@@ -167,6 +199,10 @@ impl Bookmark {
         for tag in &self.tags {
             name(tag)?;
         }
+        ensure!(
+            self.icon.as_deref().is_none_or(valid_icon),
+            "网站图标格式无效或超过 96 KiB"
+        );
         Ok(())
     }
     pub fn score(&self, q: &str) -> u8 {

@@ -26,7 +26,7 @@ authentication within five minutes; call `/auth/reauth/begin` and `finish` when
 | `POST /logout` | Revoke current session and expire its cookie |
 | `GET /api/v1/bookmarks` | `q`, `folder_id` (empty = inbox), `tag`, `pinned`, `offset`, `limit` (1–500); returns items/total/revision |
 | `GET /api/v1/bookmarks/{id}` | Full entity including version |
-| `POST /api/v1/bookmarks` | `{url_raw,title?,notes?,tags?,folder_id?,pinned?}`; optional Idempotency-Key |
+| `POST /api/v1/bookmarks` | `{url_raw,title?,notes?,tags?,folder_id?,pinned?,icon?}`; `icon` is a base64 `data:image/…` URI up to 96 KiB, `null` clears it; optional Idempotency-Key |
 | `PATCH /api/v1/bookmarks/{id}` | Partial fields and expected `version` |
 | `DELETE /api/v1/bookmarks/{id}` | `{version}`; soft delete |
 | `POST /api/v1/bookmarks/{id}/restore` | `{version,folder_id?}`; unavailable original folder must be resolved |
@@ -48,7 +48,8 @@ authentication within five minutes; call `/auth/reauth/begin` and `finish` when
 | `GET/DELETE /api/v1/imports/{id}` | Read/cancel in-memory preview; expires in one hour or at restart |
 | `POST /api/v1/imports/{id}/commit` | `{mode:"merge"|"restore",folder_id?,keep_duplicates?}`; idempotent per preview and request body; restore requires empty library |
 | `POST /api/v1/exports` | `{format:"html"|"json",includes_trash?}`; attachment response; recent auth required |
-| `GET/PATCH /api/v1/preferences` | JSON preferences; PATCH requires expected version |
+| `GET/PATCH /api/v1/preferences` | JSON preferences; PATCH requires expected version. `desktop` maps bookmark IDs to `[column,row]` cells of the pinned desktop view |
+| `POST /api/v1/favicon` | `{url}` → `{icon}`; the server fetches the page's declared icon or `/favicon.ico` (10 s timeout, ≤70 KiB, image formats only) |
 | `GET /api/v1/auth/credentials` | Names and IDs only; never serialized key material |
 | `PATCH /api/v1/auth/credentials/{id}` | `{name}`; recent auth |
 | `GET /api/v1/auth/sessions` | Current host only, no session hashes or CSRF values |

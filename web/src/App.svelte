@@ -3,6 +3,7 @@
   import Icon from './Icon.svelte';
   import AuthLayout from './AuthLayout.svelte';
   import PinnedShelf from './PinnedShelf.svelte';
+  import DesktopBoard from './DesktopBoard.svelte';
   import { request, passkey, setCSRF, csrf, ApiError } from './api';
   type Bookmark = {
     id: string;
@@ -14,6 +15,7 @@
     pinned: boolean;
     version: number;
     created_at: number;
+    icon?: string | null;
   };
   type Folder = {
     id: string;
@@ -40,7 +42,8 @@
     folders: Folder[] = [],
     trashedFolders: Folder[] = [],
     query = '',
-    folder = 'all',
+    // Opening the app lands on pinned bookmarks; see openDefault().
+    folder = landing() ? 'pinned' : 'all',
     tag = '',
     total = 0,
     revision = -1,
@@ -57,23 +60,64 @@
       )?.focus();
     else mobileToggle?.focus();
   }
-  let layout = readLayout();
-  function readLayout(): 'list' | 'grid' {
+  function landing() {
+    return ['/', '/library', '/login', '/capture'].includes(location.pathname);
+  }
+  type Layout = 'list' | 'grid' | 'desktop';
+  // The pinned view remembers its own layout because only it offers the desktop.
+  let layout: Layout = readLayout('bookmarkd-layout'),
+    pinnedLayout: Layout = readLayout('bookmarkd-pinned-layout');
+  function readLayout(key: string): Layout {
     try {
-      return localStorage.getItem('bookmarkd-layout') === 'grid'
-        ? 'grid'
-        : 'list';
+      const saved = localStorage.getItem(key);
+      return saved === 'grid' || saved === 'desktop' ? saved : 'list';
     } catch {
       return 'list';
     }
   }
-  function setLayout(next: 'list' | 'grid') {
-    layout = next;
+  $: pinnedView = view === 'library' && folder === 'pinned';
+  $: currentLayout = pinnedView
+    ? pinnedLayout
+    : layout === 'desktop'
+      ? 'list'
+      : layout;
+  $: showDesktop = currentLayout === 'desktop' && pinnedView && !organize;
+  function setLayout(next: Layout) {
+    if (pinnedView) pinnedLayout = next;
+    else layout = next;
     try {
-      localStorage.setItem('bookmarkd-layout', next);
+      localStorage.setItem(
+        pinnedView ? 'bookmarkd-pinned-layout' : 'bookmarkd-layout',
+        next
+      );
     } catch {
       /* Private storage may be unavailable. */
     }
+  }
+  // Only the moved icons are written, so other screen widths keep their layout.
+  async function saveDesktop(changed: Record<string, [number, number]>) {
+    const next = { ...(preferences.desktop || {}), ...changed };
+    if (!query.trim() && !tag)
+      for (const id of Object.keys(next))
+        if (!bookmarks.some((b) => b.id === id)) delete next[id];
+    preferences = { ...preferences, desktop: next };
+    const server = await request('/api/v1/preferences');
+    const saved = await request('/api/v1/preferences', 'PATCH', {
+      ...server,
+      desktop: next,
+    });
+    preferences = preferencesDirty
+      ? { ...preferences, version: saved.version, desktop: saved.desktop }
+      : saved;
+  }
+  // Pinned is the landing view; an empty pinned list falls back to everything.
+  async function openDefault() {
+    if (view === 'library' && landing() && !query && !tag) {
+      // Decide before loading: a concurrent refresh may supersede this load.
+      const pins = await request('/api/v1/bookmarks?pinned=true&limit=1');
+      folder = pins.total ? 'pinned' : 'all';
+    }
+    await load();
   }
   let highlights: Bookmark[] = [];
   // Bookmarks shown on the pinned shelf are not repeated in the list below it.
@@ -100,6 +144,7 @@
     tags = '',
     draftFolder = '',
     pinned = false;
+  let draftIcon = '';
   let editKey = '',
     conflicts: any = null,
     folderName = '',
@@ -401,6 +446,10 @@
     draftFolder =
       b?.folder_id || (folder !== 'all' && folder !== 'pinned' ? folder : '');
     pinned = b?.pinned || false;
+    draftIcon = b?.icon || '';
+  }
+  async function fetchIcon() {
+    draftIcon = (await request('/api/v1/favicon', 'POST', { url })).icon;
   }
   function capture() {
     const p = new URLSearchParams(location.search);
@@ -432,6 +481,7 @@
           .map((t) => t.trim())
           .filter(Boolean),
         pinned,
+        icon: draftIcon || null,
       },
       editKey
     );
@@ -445,7 +495,7 @@
     await check();
     const loadedPreferences = await request('/api/v1/preferences');
     if (!preferencesDirty) preferences = loadedPreferences;
-    await load();
+    await openDefault();
     await loadUpdate();
     capture();
   }
@@ -890,7 +940,7 @@
       if (authenticated) {
         const loadedPreferences = await request('/api/v1/preferences');
         if (!preferencesDirty) preferences = loadedPreferences;
-        await load();
+        await openDefault();
         await loadUpdate();
       }
     });
@@ -1734,18 +1784,25 @@
             </div>
             <div class="view-switch" role="group" aria-label="浏览布局">
               <button
-                class:chosen={layout === 'list'}
+                class:chosen={currentLayout === 'list'}
                 aria-label="列表视图"
-                aria-pressed={layout === 'list'}
+                aria-pressed={currentLayout === 'list'}
                 on:click={() => setLayout('list')}
                 ><Icon name="list" size={17} /></button
               ><button
-                class:chosen={layout === 'grid'}
+                class:chosen={currentLayout === 'grid'}
                 aria-label="卡片视图"
-                aria-pressed={layout === 'grid'}
+                aria-pressed={currentLayout === 'grid'}
                 on:click={() => setLayout('grid')}
                 ><Icon name="library" size={16} /></button
-              >
+              >{#if pinnedView}<button
+                  class:chosen={currentLayout === 'desktop'}
+                  aria-label="桌面视图"
+                  title="桌面视图：拖动图标自由摆放"
+                  aria-pressed={currentLayout === 'desktop'}
+                  on:click={() => setLayout('desktop')}
+                  ><Icon name="desktop" size={16} /></button
+                >{/if}
             </div>
             <button
               class="organize-button"
@@ -1831,11 +1888,22 @@
                     : '')}</span
             >{/if}
         </div>
+        {#if showDesktop && listed.length}
+          <DesktopBoard
+            items={listed}
+            positions={preferences.desktop || {}}
+            newTab={preferences.new_tab}
+            onMove={(changed) => run(() => saveDesktop(changed))}
+            onEdit={(item) => edit(item as Bookmark)}
+          />
+        {/if}
         <div
           class="bookmark-list"
           class:organizing={organize}
-          class:gallery={layout === 'grid' && !organize && view === 'library'}
-          hidden={!listed.length}
+          class:gallery={currentLayout === 'grid' &&
+            !organize &&
+            view === 'library'}
+          hidden={!listed.length || showDesktop}
           aria-busy={busy}
         >
           <table
@@ -1898,10 +1966,15 @@
                         <span
                           class="site-icon"
                           aria-hidden="true"
+                          class:has-icon={!!b.icon}
                           style:--hue={siteHue(b.url_raw)}
-                          >{(hostname(b.url_raw) || b.title)
-                            .slice(0, 1)
-                            .toUpperCase()}</span
+                          >{#if b.icon}<img
+                              src={b.icon}
+                              alt=""
+                              draggable="false"
+                            />{:else}{(hostname(b.url_raw) || b.title)
+                              .slice(0, 1)
+                              .toUpperCase()}{/if}</span
                         >
                         <span class="bookmark-copy"
                           ><span class="bookmark-title">{b.title}</span
@@ -2131,7 +2204,30 @@
               rows="4"
               maxlength="16384"
               placeholder="为什么值得收藏？"></textarea></label
-          ><label class="inline"
+          >
+          <div class="icon-field">
+            <span class="field-label">网站图标</span>
+            <span class="icon-preview" class:has-icon={!!draftIcon}
+              >{#if draftIcon}<img
+                  src={draftIcon}
+                  alt="当前网站图标"
+                />{:else}<span aria-hidden="true"
+                  >{(hostname(url) || title || '?')
+                    .slice(0, 1)
+                    .toUpperCase()}</span
+                >{/if}</span
+            ><button
+              type="button"
+              disabled={busy || !url.trim()}
+              on:click={() => run(fetchIcon)}
+              >{draftIcon ? '重新获取图标' : '获取网站图标'}</button
+            >{#if draftIcon}<button
+                type="button"
+                class="link-button"
+                on:click={() => (draftIcon = '')}>移除</button
+              >{/if}
+          </div>
+          <label class="inline"
             ><input type="checkbox" bind:checked={pinned} /> 置顶到常用收藏</label
           >{#if error}<p class="error" role="alert">
               {error}

@@ -23,6 +23,10 @@ An editorial personal archive with warm paper, terracotta accents, and Chinese s
 
 Manage folders directly in the sidebar: select ＋ next to “文件夹” to create one; hover a folder and select ⋯, or right-click it, to add a subfolder, rename, or delete. Deleting asks whether to keep its bookmarks (moved to Inbox) or move them to trash as well. Folders with children can be collapsed. Press `/` to focus search.
 
+The app opens on pinned bookmarks (or the whole library when nothing is pinned). Besides list and card views, pinned bookmarks offer a desktop view: small icons you drag to any spot, swapping places when dropped on another icon, or move with Alt + arrow keys. Positions are saved in server preferences, so every device shares them; icons that do not fit a narrow screen flow into the next free cells. Touch devices can browse and open icons; rearranging needs a mouse or keyboard.
+
+When editing a bookmark, “获取网站图标” makes the server read the page's declared icon or `/favicon.ico`, accepts it only if it is a PNG, ICO, SVG or similar image under about 70 KiB, and stores it with the bookmark as a data URI (the page CSP loads no external images). Icons in browser-exported HTML bookmarks are kept on import, and HTML exports include them.
+
 On desktop, drag a bookmark's left handle to another row's upper/lower edge to reorder, onto a sidebar folder to move it inside, or onto Inbox to move it out. Folders can also be dragged: the center nests them, the edges reorder siblings, and dropping on the “文件夹” heading (shown as “移至根目录” while dragging) moves them to the root. Changes save automatically. Clear search/tag filters before reordering; moving into folders remains available while filtered. On touch devices, use editing and batch moves.
 
 Choose Terracotta (default), Forest, Ocean, Iris, Amber, or Graphite under Settings → Browsing preferences. Each palette supports light, dark, and system appearance. Preview immediately, then select Save preferences to persist the choice.

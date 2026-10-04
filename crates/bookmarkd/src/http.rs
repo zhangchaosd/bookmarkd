@@ -601,6 +601,10 @@ fn api(
         );
         return Ok(r);
     }
+    if route == "favicon" && *method == Method::POST {
+        let icon = crate::favicon::fetch(v["url"].as_str().unwrap_or_default())?;
+        return Ok(json_response(json!({ "icon": icon })));
+    }
     if parts.first() == Some(&"update") {
         return update_route(app, method, &parts, v, s).map(json_response);
     }

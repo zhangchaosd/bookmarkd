@@ -280,7 +280,19 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
   const listed = entries.length - shelved.length;
   const rowFor = (title: string) =>
     rows.filter({ has: page.locator('.bookmark-title', { hasText: title }) });
+  // Reloads land on pinned bookmarks; these checks are about the full library.
+  const showAll = async () => {
+    const heading = page.getByRole('heading', { level: 1 });
+    await expect(heading).toHaveText(/常用置顶|全部收藏/);
+    if ((await heading.innerText()).includes('常用置顶'))
+      await page
+        .locator('nav button', { hasText: '全部收藏' })
+        .first()
+        .evaluate((button: HTMLButtonElement) => button.click());
+    await expect(heading).toHaveText('全部收藏');
+  };
   const waitForLibrary = async () => {
+    await showAll();
     await expect(
       page.getByRole('heading', { level: 1, name: '全部收藏', exact: true })
     ).toBeVisible();
@@ -291,6 +303,9 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
     );
   };
   await page.reload();
+  await expect(
+    page.getByRole('heading', { level: 1, name: '常用置顶', exact: true })
+  ).toBeVisible();
   await waitForLibrary();
   await expect(
     page.getByRole('region', { name: '精选置顶' }).getByRole('link')
@@ -611,6 +626,7 @@ test('archive design: layouts, responsive navigation, keyboard, themes and editi
     .click();
   await expect(editDialog).toHaveCount(0);
   await page.reload();
+  await showAll();
   await expect(rowFor('慢慢看，慢慢收藏 · 已整理')).toBeVisible();
   await expect(rows).toHaveCount(listed + 1);
   // Logging out from the open mobile sidebar must release its focus trap.

@@ -1,5 +1,6 @@
 mod backup;
 mod config;
+mod favicon;
 mod http;
 mod model;
 mod ordering;

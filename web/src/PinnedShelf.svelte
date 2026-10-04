@@ -6,6 +6,7 @@
     url_raw: string;
     notes: string;
     tags: string[];
+    icon?: string | null;
   };
   export let items: Item[] = [];
   export let newTab = true;
@@ -31,8 +32,11 @@
     {#each items as item, i (item.id)}
       <article class="shelf-card">
         <div class="card-top">
-          <span class="card-domain">{domain(item.url_raw)}</span><span
-            class="card-actions"
+          <span class="card-domain"
+            >{#if item.icon}<img src={item.icon} alt="" />{/if}{domain(
+              item.url_raw
+            )}</span
+          ><span class="card-actions"
             ><button
               class="card-edit"
               title="编辑收藏"
@@ -186,6 +190,13 @@
     .card-edit {
       opacity: 0.85;
     }
+  }
+  .card-domain img {
+    width: 14px;
+    height: 14px;
+    margin-right: 7px;
+    vertical-align: -3px;
+    object-fit: contain;
   }
   .card-domain {
     font: 10px var(--mono, monospace);

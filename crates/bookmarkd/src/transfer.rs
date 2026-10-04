@@ -73,6 +73,12 @@ pub fn parse(content: &str, format: &str) -> Result<(Library, Vec<String>)> {
                     Ok(mut b) => {
                         b.original_created_at =
                             el.value().attr("add_date").and_then(|s| s.parse().ok());
+                        // Browser exports embed icons as data URIs; keep only valid ones.
+                        b.icon = el
+                            .value()
+                            .attr("icon")
+                            .filter(|s| crate::model::valid_icon(s))
+                            .map(String::from);
                         l.bookmarks.push(b);
                     }
                     Err(e) => warnings.push(format!(
@@ -112,8 +118,13 @@ pub fn html(l: &Library) -> String {
             .iter()
             .filter(|b| b.deleted_at.is_none() && b.folder_id.as_deref() == p)
         {
+            let icon = b
+                .icon
+                .as_deref()
+                .map(|i| format!(" ICON=\"{}\"", escape(i)))
+                .unwrap_or_default();
             out.push_str(&format!(
-                "<DT><A HREF=\"{}\" ADD_DATE=\"{}\">{}</A>\n",
+                "<DT><A HREF=\"{}\" ADD_DATE=\"{}\"{icon}>{}</A>\n",
                 escape(&b.url_raw),
                 b.original_created_at.unwrap_or(b.created_at),
                 escape(&b.title)
