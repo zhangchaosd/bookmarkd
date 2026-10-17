@@ -2,11 +2,7 @@
 
 [简体中文](README.md) · [Design](private_bookmark_hub_project_design.md) · [Lightweight systemd deployment (中文)](docs/DEPLOY_SYSTEMD.zh-CN.md) · [Operations](docs/OPERATIONS.md) · [Authentication](docs/AUTH.md) · [Validation report](docs/TESTING.md)
 
-[![CI](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml)
-[![Release](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml)
-
 Your bookmarks, independent of your browser. A self-hosted, single-user web app with a Rust backend, a Chinese Svelte interface, local SQLite databases, and embedded frontend assets. No Node.js runtime, external database, CDN, or authentication server is required to run it.
-
 
 ![bookmarkd desktop interface](docs/images/desktop.png)
 
@@ -121,16 +117,18 @@ npm test
 
 Browser tests use a standard WebAuthn virtual authenticator without any production authentication bypass. They exercise registration, login, both cookie lifetimes, shared-host isolation, bookmark management, import/export, and revocation. See the [validation report](docs/TESTING.md) for real-device and performance limits.
 
-## Automated builds and releases
+## Local checks and releases
 
-Main-branch pushes and pull requests run frontend checks/build, Rust fmt/Clippy/tests, and browser integration tests. Push a version tag to publish:
+GitHub Actions is not used; checks and releases run locally on an Apple Silicon Mac. After bumping the version in `Cargo.toml` and `web/package.json` and committing:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+SMOKE_HOST=user@x86_64-linux-host scripts/release.sh            # rehearse
+SMOKE_HOST=user@x86_64-linux-host scripts/release.sh --publish  # publish
 ```
 
-Tags matching `v*` trigger five native platform builds, tests, embedded-UI startup, backup/restore smoke tests, and an automatic GitHub **prerelease** containing executables, manifests, license notices, and SHA-256 checksums. Releases remain prereleases until real-device coverage and independent security review are complete. Manual workflow runs only produce Actions artifacts.
+The script runs frontend checks/build, Rust fmt/Clippy/tests, builds five platforms (macOS arm64 natively, macOS x86_64 as a cross build, Linux x86_64/aarch64 and Windows x86_64 with cargo-zigbuild; Linux needs only glibc 2.28), runs the browser integration tests against the release binary, smoke-tests embedded-UI startup and backup/restore (macOS arm64 locally, Linux x86_64 on `SMOKE_HOST`), writes a manifest per executable (platforms that cannot run here are recorded as not run), and checksums everything. `--publish` tags `v*`, pushes, creates a GitHub **prerelease** and re-verifies the downloaded checksums. Releases remain prereleases until real-device coverage and independent security review are complete.
+
+Requires Zig 0.14.1 (default `~/.local/zig-0.14.1`, override with `ZIG_HOME`), cargo-zigbuild, an authenticated `gh` and Playwright Chromium.
 
 ## Layout and boundaries
 
@@ -140,7 +138,7 @@ crates/bookmarkd/  CLI, configuration, business transactions, HTTP, asset embedd
 web/              Svelte + TypeScript frontend and Playwright tests
 docs/             Authentication, operations, validation and limitations
 scripts/          Native artifact startup, restore and dependency checks
-.github/workflows/ CI and five-platform releases
+scripts/release.sh   local checks and five-platform releases
 ```
 
 This version stores transactional business snapshots in SQLite; authentication uses separate normalized tables. The 50,000-entry import limit is not a claim that design performance targets have been met at that size. Optional metadata fetching, AI, public sharing, and multiple users are outside scope.

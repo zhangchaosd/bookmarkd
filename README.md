@@ -2,11 +2,7 @@
 
 [English](README.en.md) · [设计文档](private_bookmark_hub_project_design.md) · [systemd 轻量部署](docs/DEPLOY_SYSTEMD.zh-CN.md) · [部署与恢复](docs/OPERATIONS.md) · [认证模块](docs/AUTH.md) · [验证报告](docs/TESTING.md)
 
-[![CI](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/ci.yml)
-[![Release](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml/badge.svg)](https://github.com/zhangchaosd/bookmarkd/actions/workflows/release.yml)
-
 把收藏从浏览器中独立出来。一个自托管、单用户的收藏 Web 应用：Rust 服务端、Svelte 中文界面、SQLite 本地数据，前端嵌入可执行文件。运行无需 Node.js、外部数据库、CDN 或认证服务。
-
 
 ![bookmarkd desktop interface](docs/images/desktop.png)
 
@@ -120,16 +116,18 @@ npm test
 
 浏览器测试使用标准 WebAuthn 虚拟认证器，无生产认证绕过入口。覆盖首次注册、登录、两种 Cookie、共享宿主隔离、收藏操作、导入导出与撤销。实机兼容性和性能范围见 [验证报告](docs/TESTING.md)。
 
-## 自动构建发布
+## 本地检查与发版
 
-`main` 提交和 Pull Request 执行类型检查、前端构建、fmt、Clippy、Rust 测试及浏览器端到端测试。
+不使用 GitHub Actions，检查和发版都在 Apple Silicon Mac 上本地完成。更新 `Cargo.toml` 与 `web/package.json` 的版本并提交后：
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+SMOKE_HOST=user@x86_64-linux主机 scripts/release.sh            # 演练
+SMOKE_HOST=user@x86_64-linux主机 scripts/release.sh --publish  # 发布
 ```
 
-`v*` 标签触发五个平台原生构建、测试、单文件启动及备份恢复检查，再自动创建 GitHub **预发布**，上传可执行文件、测试清单、许可证和 SHA-256 校验和。未完成实机认证器矩阵与独立安全审查前不自动标记为稳定版。手动运行 Release workflow 只生成 Actions artifacts。
+脚本依次执行前端检查与构建、fmt、Clippy、Rust 测试，构建五个平台（macOS arm64 原生、macOS x86_64 交叉编译，Linux x86_64/aarch64 与 Windows x86_64 用 cargo-zigbuild，Linux 只依赖 glibc 2.28），用 release 程序跑浏览器端到端测试，再做单文件启动及备份恢复检查（macOS arm64 在本机、Linux x86_64 在 `SMOKE_HOST` 上），为每个文件生成测试清单（无法运行的平台在清单中如实注明未运行），并生成 SHA-256 校验和。`--publish` 会打 `v*` 标签、推送并创建 GitHub **预发布**，上传后重新下载核对校验和。未完成实机认证器矩阵与独立安全审查前不标记为稳定版。
+
+需要 Zig 0.14.1（默认 `~/.local/zig-0.14.1`，可用 `ZIG_HOME` 指定）、cargo-zigbuild、登录好的 `gh` 和 Playwright Chromium。
 
 ## 项目结构
 
@@ -139,7 +137,7 @@ crates/bookmarkd/  CLI、配置、业务事务、HTTP 和资源嵌入
 web/              Svelte + TypeScript 界面与 Playwright 测试
 docs/             认证边界、部署恢复、实测与限制
 scripts/          原生制品启动、备份恢复和依赖检查
-.github/workflows/ CI 与五平台自动发布
+scripts/release.sh   本地检查与五平台发版
 ```
 
 此版本使用 SQLite 中的事务化业务快照；认证使用独立规范化表。50,000 条导入上限不等于已证明该规模满足设计性能目标。未实现可选元数据抓取、AI、公开分享或多用户。
