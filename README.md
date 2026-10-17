@@ -68,6 +68,18 @@ Windows 使用 PowerShell 执行 `.\bookmarkd-windows-x86_64.exe`，不需要 `c
 
 最后一条命令在另一个终端执行。使用 `http://localhost:8765`，不要替换成 `127.0.0.1`，因为 Origin 必须精确匹配。
 
+## 只读集成令牌
+
+可信的服务端程序（例如个人主页）可以用只读令牌读取收藏，无需 Passkey 会话：
+
+```sh
+./bookmarkd --config ./data/config.toml token create homepage   # 令牌只显示一次
+./bookmarkd --config ./data/config.toml token list
+./bookmarkd --config ./data/config.toml token revoke homepage
+```
+
+请求时带上 `Authorization: Bearer <token>`，例如 `GET /api/v1/bookmarks?pinned=true&limit=12`。令牌只能 `GET` 收藏、文件夹、标签和库版本四个接口，其他请求一律 401；带 `Origin` 或 `Cookie` 的请求会被拒绝，因此不能在网页中使用。详见 [docs/API.md](docs/API.md)。
+
 ## 检查与安装更新
 
 「设置与迁移 → 版本与更新」显示当前版本，可「立即检查」GitHub Releases，也可设置每天或每周固定时间（服务器时区）自动检查；渠道可选「包含预发布版本」（默认，目前所有版本均为预发布）或「仅正式版本」。自动检查默认关闭，开启后服务器会访问 `api.github.com`。

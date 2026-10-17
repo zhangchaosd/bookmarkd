@@ -69,6 +69,18 @@ For local development only:
 
 Use `http://localhost:8765` exactly; `127.0.0.1` is a different origin.
 
+## Read-only integration tokens
+
+Trusted server-side programs, such as a personal homepage, can read the library with a read-only token instead of a Passkey session:
+
+```sh
+./bookmarkd --config ./data/config.toml token create homepage   # printed once
+./bookmarkd --config ./data/config.toml token list
+./bookmarkd --config ./data/config.toml token revoke homepage
+```
+
+Send `Authorization: Bearer <token>`, for example `GET /api/v1/bookmarks?pinned=true&limit=12`. Tokens can only `GET` the bookmarks, folders, tags and library revision routes; everything else answers 401, and requests carrying `Origin` or `Cookie` are refused, so tokens cannot be used from a web page. See [docs/API.md](docs/API.md).
+
 ## Checking for and installing updates
 
 Settings → “版本与更新” shows the current version, checks GitHub Releases on demand, and can check automatically every day or every week at a fixed server-local time. The channel is either prereleases included (default; every release so far is a prerelease) or stable only. Automatic checks are off by default; when enabled, the server contacts `api.github.com`.
