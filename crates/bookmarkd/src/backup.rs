@@ -19,7 +19,8 @@ pub fn snapshot(source: &Path, target: &Path) -> Result<()> {
 }
 pub fn scrub_auth(path: &Path) -> Result<()> {
     let db = rusqlite::Connection::open(path)?;
-    db.execute_batch("DELETE FROM sessions; DELETE FROM grants; PRAGMA wal_checkpoint(TRUNCATE);")?;
+    db.execute_batch(bookmarkd_auth::INTEGRATION_SCHEMA)?;
+    db.execute_batch("DELETE FROM sessions; DELETE FROM grants; DELETE FROM integration_tokens; PRAGMA wal_checkpoint(TRUNCATE);")?;
     Ok(())
 }
 /// Writes consistent SQLite snapshots; safe while the server is running.

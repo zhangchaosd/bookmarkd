@@ -33,6 +33,20 @@ Policy enforced by the adapter:
 - Session tokens have 256 random bits. Only purpose-separated SHA-256 hashes are
   stored. CSRF values are independent 256-bit synchronizer tokens kept server-side,
   returned only by the same-origin session endpoint, and compared in constant time.
+- Read-only integration tokens (`bookmarkd token create|list|revoke <name>`) have
+  256 random bits, are printed once, and are stored only as
+  `digest("integration-token", token)` with app, name, creation and coarse last-use
+  times. Lookup compares every stored digest for the app in constant time. They are
+  separate from Passkey sessions: no cookie, no CSRF value, never "recent
+  authentication", and only `GET` on bookmarks, folders, tags and library revision;
+  everything else answers 401 (see API.md). Bearer requests with an `Origin` or
+  `Cookie` header are refused, so tokens cannot be used from a browser page.
+  Requests share the rate-limit table (60/min per peer within the global ceiling).
+  Token values are never logged. Revocation is immediate. The table is an additive
+  `CREATE TABLE IF NOT EXISTS` within auth schema 1, so hosts on older crate
+  versions sharing the database are unaffected. Backups made with `--include-auth`
+  drop integration tokens along with sessions and grants; recreate them after an
+  auth restore.
 - Short sessions use a session cookie and a 12-hour server deadline. Remembered
   sessions use an absolute 2,592,000-second cookie/server deadline. Neither slides.
 - Every session lookup checks app, origin, expiry, and credential revocation.

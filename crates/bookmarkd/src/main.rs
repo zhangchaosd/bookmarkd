@@ -75,6 +75,11 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// Manage read-only API tokens for trusted server-side integrations.
+    Token {
+        #[command(subcommand)]
+        command: TokenCommand,
+    },
     /// Check GitHub Releases for a newer version, install it, or roll back.
     Update {
         #[command(subcommand)]
@@ -94,6 +99,17 @@ enum UpdateCommand {
     Rollback {
         #[arg(long)]
         yes: bool,
+    },
+}
+#[derive(Subcommand)]
+enum TokenCommand {
+    /// Create a named read-only token and print it once.
+    Create {
+        name: String,
+    },
+    List,
+    Revoke {
+        name: String,
     },
 }
 #[derive(Subcommand)]
@@ -290,6 +306,28 @@ async fn main() -> Result<()> {
                 let _lock = lock(&c)?;
                 auth.connection()?;
                 println!("Auth schema 1 is current. Unknown schemas are refused.");
+            }
+        },
+        Command::Token { command } => match command {
+            TokenCommand::Create { name } => {
+                let token = auth.create_integration_token(&c.auth.app_id, &name)?;
+                println!(
+                    "Read-only token \"{name}\" (shown once; store it now):\n{token}\nUse: Authorization: Bearer <token> on GET {}/api/v1/bookmarks, folders, tags, library/revision",
+                    c.server.public_url
+                );
+            }
+            TokenCommand::List => {
+                for x in auth.integration_tokens(&c.auth.app_id)? {
+                    println!(
+                        "{}\tcreated={}\tlast_used={}",
+                        x.name,
+                        x.created_at,
+                        x.last_used_at.map_or("never".into(), |t| t.to_string())
+                    );
+                }
+            }
+            TokenCommand::Revoke { name } => {
+                auth.revoke_integration_token(&c.auth.app_id, &name)?
             }
         },
         Command::Backup {

@@ -204,6 +204,9 @@ fn dispatch(
     if path == "/healthz" && *method == Method::GET {
         return Ok(json_response(json!({"status":"ok"})));
     }
+    if h.contains_key(header::AUTHORIZATION) {
+        return bearer_route(app, method, path, uri, h, peer);
+    }
     let write = !matches!(*method, Method::GET | Method::HEAD);
     if write {
         ensure!(text_header(h, "origin") == origin, "FORBIDDEN");
@@ -286,6 +289,59 @@ fn dispatch(
     );
     Ok(r)
 }
+/// Fixed one-minute windows shared by authentication ceremonies and bearer reads.
+fn limit(app: &App, keys: impl IntoIterator<Item = (String, u32)>) -> Result<()> {
+    let mut rate = app.rate.lock().unwrap();
+    rate.retain(|_, (t, _)| *t + 60 > now());
+    for (key, max) in keys {
+        let e = rate.entry(key).or_insert((now(), 0));
+        ensure!(e.1 < max, "RATE_LIMITED");
+        e.1 += 1;
+    }
+    Ok(())
+}
+/// Routes a read-only integration token may call, GET only.
+const TOKEN_ROUTES: [&str; 4] = [
+    "/api/v1/bookmarks",
+    "/api/v1/folders",
+    "/api/v1/tags",
+    "/api/v1/library/revision",
+];
+/// Server-to-server reads with `Authorization: Bearer`. Never touches cookies or
+/// sessions, so it cannot satisfy CSRF or recent authentication; anything outside
+/// `TOKEN_ROUTES` answers 401 even with a valid token.
+fn bearer_route(
+    app: &App,
+    method: &Method,
+    path: &str,
+    uri: &Uri,
+    h: &HeaderMap,
+    peer: &str,
+) -> Result<Response> {
+    limit(
+        app,
+        [
+            ("global".to_owned(), 200),
+            (format!("peer:bearer:{peer}"), 60),
+        ],
+    )?;
+    let token = text_header(h, "authorization")
+        .split_once(' ')
+        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+        .map_or("", |(_, t)| t.trim());
+    let allowed = *method == Method::GET
+        && TOKEN_ROUTES.contains(&path)
+        && h.get("origin").is_none()
+        && h.get("cookie").is_none();
+    // Verify even when the route is refused so both paths cost the same.
+    let valid = app
+        .auth
+        .integration_token(token, &app.config.auth.app_id)?
+        .is_some();
+    ensure!(allowed && valid, "UNAUTHENTICATED");
+    let parts: Vec<&str> = path.trim_start_matches("/api/v1/").split('/').collect();
+    Ok(json_response(read(app, &parts, uri)?))
+}
 fn auth_route(
     app: &App,
     method: &Method,
@@ -306,25 +362,15 @@ fn auth_route(
     } else {
         old_binding
     };
-    {
-        let mut rate = app.rate.lock().unwrap();
-        rate.retain(|_, (t, _)| *t + 60 > now());
-        for (key, max) in [
+    let max = if path == "/auth/setup/verify" { 5 } else { 20 };
+    limit(
+        app,
+        [
             ("global".to_owned(), 200),
-            (
-                format!("peer:{path}:{peer}"),
-                if path == "/auth/setup/verify" { 5 } else { 20 },
-            ),
-            (
-                format!("{path}:{binding}"),
-                if path == "/auth/setup/verify" { 5 } else { 20 },
-            ),
-        ] {
-            let e = rate.entry(key).or_insert((now(), 0));
-            ensure!(e.1 < max, "RATE_LIMITED");
-            e.1 += 1;
-        }
-    }
+            (format!("peer:{path}:{peer}"), max),
+            (format!("{path}:{binding}"), max),
+        ],
+    )?;
     let reauth = path.starts_with("/auth/reauth/");
     let s = if reauth {
         let s = session(app, h)?.ok_or_else(|| anyhow::anyhow!("UNAUTHENTICATED"))?;
@@ -669,80 +715,7 @@ fn api(
         }
     }
     if *method == Method::GET {
-        let mut l = app.store.read()?;
-        l.folders.sort_by_key(|f| (f.position, f.id.clone()));
-        let q: HashMap<String, String> =
-            url::form_urlencoded::parse(uri.query().unwrap_or("").as_bytes())
-                .into_owned()
-                .collect();
-        let value = match parts.as_slice() {
-            ["library", "revision"] => json!({"revision":l.revision}),
-            ["preferences"] => l.preferences,
-            ["folders"] => json!(
-                l.folders
-                    .iter()
-                    .filter(|f| f.deleted_at.is_none())
-                    .collect::<Vec<_>>()
-            ),
-            ["tags"] => {
-                let mut tags: std::collections::BTreeSet<String> = l.tags.iter().cloned().collect();
-                for b in &l.bookmarks {
-                    if b.deleted_at.is_none() {
-                        tags.extend(b.tags.clone());
-                    }
-                }
-                json!(tags)
-            }
-            ["trash"] => {
-                json!({"bookmarks":l.bookmarks.iter().filter(|b|b.deleted_at.is_some()).collect::<Vec<_>>(),"folders":l.folders.iter().filter(|f|f.deleted_at.is_some()).collect::<Vec<_>>()})
-            }
-            ["bookmarks", id] => json!(
-                l.bookmarks
-                    .iter()
-                    .find(|b| b.id == *id)
-                    .ok_or_else(|| anyhow::anyhow!("NOT_FOUND"))?
-            ),
-            ["bookmarks"] => {
-                let search = q.get("q").map(String::as_str).unwrap_or("");
-                let mut entries: Vec<_> = l
-                    .bookmarks
-                    .iter()
-                    .filter(|b| {
-                        b.deleted_at.is_none()
-                            && b.matches(search)
-                            && q.get("folder_id")
-                                .is_none_or(|f| b.folder_id.as_deref().unwrap_or("") == f)
-                            && q.get("tag").is_none_or(|t| b.tags.contains(t))
-                            && (q.get("pinned").is_none_or(|v| v != "true" || b.pinned))
-                    })
-                    .collect();
-                entries.sort_by_key(|b| {
-                    (
-                        b.score(search),
-                        if q.get("pinned").is_some_and(|v| v == "true") {
-                            b.pinned_position
-                        } else {
-                            b.position
-                        },
-                        std::cmp::Reverse(b.created_at),
-                        &b.id,
-                    )
-                });
-                let total = entries.len();
-                let offset = q
-                    .get("offset")
-                    .and_then(|x| x.parse::<usize>().ok())
-                    .unwrap_or(0);
-                let limit = q
-                    .get("limit")
-                    .and_then(|x| x.parse::<usize>().ok())
-                    .unwrap_or(100)
-                    .clamp(1, 500);
-                json!({"items":entries.into_iter().skip(offset).take(limit).collect::<Vec<_>>(),"total":total,"revision":l.revision})
-            }
-            _ => bail!("NOT_FOUND"),
-        };
-        return Ok(json_response(value));
+        return Ok(json_response(read(app, &parts, uri)?));
     }
     if route == "trash/purge" {
         recent(s)?;
@@ -754,6 +727,81 @@ fn api(
         .store
         .mutate(key, &hash, |l| mutate(l, method, &parts, &v))?;
     Ok(json_response(result))
+}
+fn read(app: &App, parts: &[&str], uri: &Uri) -> Result<Value> {
+    let mut l = app.store.read()?;
+    l.folders.sort_by_key(|f| (f.position, f.id.clone()));
+    let q: HashMap<String, String> =
+        url::form_urlencoded::parse(uri.query().unwrap_or("").as_bytes())
+            .into_owned()
+            .collect();
+    Ok(match parts {
+        ["library", "revision"] => json!({"revision":l.revision}),
+        ["preferences"] => l.preferences,
+        ["folders"] => json!(
+            l.folders
+                .iter()
+                .filter(|f| f.deleted_at.is_none())
+                .collect::<Vec<_>>()
+        ),
+        ["tags"] => {
+            let mut tags: std::collections::BTreeSet<String> = l.tags.iter().cloned().collect();
+            for b in &l.bookmarks {
+                if b.deleted_at.is_none() {
+                    tags.extend(b.tags.clone());
+                }
+            }
+            json!(tags)
+        }
+        ["trash"] => {
+            json!({"bookmarks":l.bookmarks.iter().filter(|b|b.deleted_at.is_some()).collect::<Vec<_>>(),"folders":l.folders.iter().filter(|f|f.deleted_at.is_some()).collect::<Vec<_>>()})
+        }
+        ["bookmarks", id] => json!(
+            l.bookmarks
+                .iter()
+                .find(|b| b.id == *id)
+                .ok_or_else(|| anyhow::anyhow!("NOT_FOUND"))?
+        ),
+        ["bookmarks"] => {
+            let search = q.get("q").map(String::as_str).unwrap_or("");
+            let mut entries: Vec<_> = l
+                .bookmarks
+                .iter()
+                .filter(|b| {
+                    b.deleted_at.is_none()
+                        && b.matches(search)
+                        && q.get("folder_id")
+                            .is_none_or(|f| b.folder_id.as_deref().unwrap_or("") == f)
+                        && q.get("tag").is_none_or(|t| b.tags.contains(t))
+                        && (q.get("pinned").is_none_or(|v| v != "true" || b.pinned))
+                })
+                .collect();
+            entries.sort_by_key(|b| {
+                (
+                    b.score(search),
+                    if q.get("pinned").is_some_and(|v| v == "true") {
+                        b.pinned_position
+                    } else {
+                        b.position
+                    },
+                    std::cmp::Reverse(b.created_at),
+                    &b.id,
+                )
+            });
+            let total = entries.len();
+            let offset = q
+                .get("offset")
+                .and_then(|x| x.parse::<usize>().ok())
+                .unwrap_or(0);
+            let limit = q
+                .get("limit")
+                .and_then(|x| x.parse::<usize>().ok())
+                .unwrap_or(100)
+                .clamp(1, 500);
+            json!({"items":entries.into_iter().skip(offset).take(limit).collect::<Vec<_>>(),"total":total,"revision":l.revision})
+        }
+        _ => bail!("NOT_FOUND"),
+    })
 }
 fn mutate(l: &mut Library, method: &Method, p: &[&str], v: &Value) -> Result<Value> {
     match (method.as_str(), p) {
@@ -1048,5 +1096,259 @@ fn mutate(l: &mut Library, method: &Method, p: &[&str], v: &Value) -> Result<Val
             Ok(json!({"ok":true}))
         }
         _ => bail!("NOT_FOUND"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Auth, Server, Storage};
+    use axum::{body::Body, extract::connect_info::MockConnectInfo, http::Request};
+    use bookmarkd_auth::Identity;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    fn fixture() -> (tempfile::TempDir, Arc<App>) {
+        let d = tempfile::tempdir().unwrap();
+        let user_id = random();
+        std::fs::write(d.path().join("user-id.txt"), &user_id).unwrap();
+        SqliteAuthStore::initialize(
+            &d.path().join("auth.db"),
+            &Identity {
+                rp_id: "example.com".into(),
+                user_id,
+            },
+        )
+        .unwrap();
+        Store::init(&d.path().join("bookmarks.db")).unwrap();
+        let app = App::new(Config {
+            server: Server {
+                listen: "127.0.0.1:0".into(),
+                public_url: "https://bm.example.com".into(),
+                allow_insecure_localhost: false,
+            },
+            storage: Storage {
+                business_db: d.path().join("bookmarks.db"),
+            },
+            auth: Auth {
+                app_id: "bookmarkd".into(),
+                rp_id: "example.com".into(),
+                rp_name: "Test".into(),
+                user_name: "owner".into(),
+                user_id_file: d.path().join("user-id.txt"),
+                store: d.path().join("auth.db"),
+                setup_mode: "auto".into(),
+            },
+        })
+        .unwrap();
+        for (url, pinned) in [("https://a.example/", true), ("https://b.example/", false)] {
+            app.store
+                .mutate(None, "", |l| {
+                    mutate(
+                        l,
+                        &Method::POST,
+                        &["bookmarks"],
+                        &json!({"url_raw": url, "pinned": pinned, "tags": ["t"]}),
+                    )
+                })
+                .unwrap();
+        }
+        (d, app)
+    }
+    async fn call(
+        app: &Arc<App>,
+        method: &str,
+        uri: &str,
+        headers: &[(&str, &str)],
+    ) -> (StatusCode, Value, HeaderMap) {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("host", "bm.example.com");
+        for (k, v) in headers {
+            req = req.header(*k, *v);
+        }
+        let body = if method == "GET" {
+            Body::empty()
+        } else {
+            Body::from("{}")
+        };
+        let r = router(app.clone())
+            .layer(MockConnectInfo(std::net::SocketAddr::from((
+                [127, 0, 0, 1],
+                9,
+            ))))
+            .oneshot(req.body(body).unwrap())
+            .await
+            .unwrap();
+        let (status, headers) = (r.status(), r.headers().clone());
+        let bytes = r.into_body().collect().await.unwrap().to_bytes();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+            headers,
+        )
+    }
+
+    #[tokio::test]
+    async fn read_token_lists_pinned_bookmarks() {
+        let (_d, app) = fixture();
+        let token = app
+            .auth
+            .create_integration_token("bookmarkd", "homepage")
+            .unwrap();
+        let bearer = format!("Bearer {token}");
+        let auth = [("authorization", bearer.as_str())];
+        let (status, v, headers) =
+            call(&app, "GET", "/api/v1/bookmarks?pinned=true&limit=12", &auth).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers.get(header::SET_COOKIE).is_none());
+        assert_eq!(v["total"], 1);
+        let item = &v["items"][0];
+        assert_eq!(item["url_raw"], "https://a.example/");
+        // `icon` is omitted when unset; the consumer treats it as optional.
+        for field in ["id", "title", "tags", "pinned_position"] {
+            assert!(item.get(field).is_some(), "missing {field}");
+        }
+        for path in [
+            "/api/v1/folders",
+            "/api/v1/tags",
+            "/api/v1/library/revision",
+        ] {
+            assert_eq!(
+                call(&app, "GET", path, &auth).await.0,
+                StatusCode::OK,
+                "{path}"
+            );
+        }
+        let lower = format!("bearer {token}");
+        assert_eq!(
+            call(&app, "GET", "/api/v1/tags", &[("authorization", &lower)])
+                .await
+                .0,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn read_token_is_refused_for_writes_and_other_routes() {
+        let (_d, app) = fixture();
+        let token = app
+            .auth
+            .create_integration_token("bookmarkd", "homepage")
+            .unwrap();
+        let bearer = format!("Bearer {token}");
+        let auth = [
+            ("authorization", bearer.as_str()),
+            ("origin", "https://bm.example.com"),
+            ("content-type", "application/json"),
+        ];
+        for (method, path) in [
+            ("POST", "/api/v1/bookmarks"),
+            ("PATCH", "/api/v1/bookmarks/x"),
+            ("DELETE", "/api/v1/bookmarks/x"),
+            ("POST", "/api/v1/folders"),
+            ("POST", "/api/v1/tags"),
+            ("POST", "/api/v1/exports"),
+            ("POST", "/api/v1/trash/purge"),
+            ("POST", "/logout"),
+            ("POST", "/auth/login/begin"),
+        ] {
+            let (status, v, _) = call(&app, method, path, &auth).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
+            assert_eq!(v["error"]["code"], "UNAUTHENTICATED");
+        }
+        let auth = [("authorization", bearer.as_str())];
+        for path in [
+            "/api/v1/session",
+            "/api/v1/trash",
+            "/api/v1/preferences",
+            "/api/v1/auth/credentials",
+            "/api/v1/auth/sessions",
+            "/api/v1/update",
+            "/api/v1/bookmarks/x",
+            "/settings",
+        ] {
+            assert_eq!(
+                call(&app, "GET", path, &auth).await.0,
+                StatusCode::UNAUTHORIZED,
+                "{path}"
+            );
+        }
+        assert_eq!(
+            call(&app, "HEAD", "/api/v1/bookmarks", &auth).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+        // Browser-originated requests cannot use the token.
+        assert_eq!(
+            call(
+                &app,
+                "GET",
+                "/api/v1/bookmarks",
+                &[
+                    ("authorization", bearer.as_str()),
+                    ("origin", "https://bm.example.com")
+                ]
+            )
+            .await
+            .0,
+            StatusCode::UNAUTHORIZED
+        );
+        // The token is not a session and the store is unchanged.
+        assert_eq!(app.store.read().unwrap().bookmarks.len(), 2);
+        let cookie = format!("{}={token}", app.config.cookie_name());
+        let (status, v, _) = call(&app, "GET", "/api/v1/session", &[("cookie", &cookie)]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(v["authenticated"], false);
+    }
+
+    #[tokio::test]
+    async fn revoked_or_unknown_token_is_rejected() {
+        let (_d, app) = fixture();
+        let token = app
+            .auth
+            .create_integration_token("bookmarkd", "homepage")
+            .unwrap();
+        let bearer = format!("Bearer {token}");
+        let path = "/api/v1/bookmarks?pinned=true";
+        assert_eq!(
+            call(&app, "GET", path, &[("authorization", &bearer)])
+                .await
+                .0,
+            StatusCode::OK
+        );
+        app.auth
+            .revoke_integration_token("bookmarkd", "homepage")
+            .unwrap();
+        for value in [
+            bearer.as_str(),
+            "Bearer nope",
+            "Bearer ",
+            "Basic abc",
+            &token,
+        ] {
+            assert_eq!(
+                call(&app, "GET", path, &[("authorization", value)]).await.0,
+                StatusCode::UNAUTHORIZED,
+                "{value}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn bearer_requests_share_the_rate_limiter() {
+        let (_d, app) = fixture();
+        let auth = [("authorization", "Bearer guess")];
+        for _ in 0..60 {
+            assert_eq!(
+                call(&app, "GET", "/api/v1/tags", &auth).await.0,
+                StatusCode::UNAUTHORIZED
+            );
+        }
+        assert_eq!(
+            call(&app, "GET", "/api/v1/tags", &auth).await.0,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        assert_eq!(app.rate.lock().unwrap()["global"].1, 61);
     }
 }

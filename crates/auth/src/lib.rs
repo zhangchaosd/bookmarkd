@@ -40,6 +40,15 @@ pub struct Session {
     pub expires_at: i64,
     pub recent_at: i64,
 }
+/// Read-only integration token metadata; the token value itself is never stored.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct IntegrationToken {
+    pub name: String,
+    pub created_at: i64,
+    pub last_used_at: Option<i64>,
+}
+/// Additive table inside schema 1, so hosts on older crate versions keep working.
+pub const INTEGRATION_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS integration_tokens(hash TEXT PRIMARY KEY,app TEXT NOT NULL,name TEXT NOT NULL,created INTEGER NOT NULL,last_used INTEGER,UNIQUE(app,name));";
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StoredCredential {
     pub id: String,
@@ -87,6 +96,7 @@ impl SqliteAuthStore {
             "INSERT INTO identity VALUES(?1,?2)",
             params![identity.rp_id, identity.user_id],
         )?;
+        db.execute_batch(INTEGRATION_SCHEMA)?;
         Ok(Self { path: path.into() })
     }
     pub fn open(path: &Path, expected: &Identity) -> Result<Self> {
@@ -97,6 +107,7 @@ impl SqliteAuthStore {
             i.rp_id == expected.rp_id && i.user_id == expected.user_id,
             "authentication identity mismatch"
         );
+        s.connection()?.execute_batch(INTEGRATION_SCHEMA)?;
         Ok(s)
     }
     pub fn connection(&self) -> Result<Connection> {
@@ -226,6 +237,74 @@ impl SqliteAuthStore {
         ensure!(tx.execute("UPDATE sessions SET recent=?1 WHERE hash=?2 AND app=?3 AND origin=?4 AND expires>?1",params![now(),digest("session",token),app,origin])?==1,"session expired");
         tx.commit()?;
         Ok(())
+    }
+    /// Creates a named read-only integration token for `app`; the value is returned once.
+    pub fn create_integration_token(&self, app: &str, name: &str) -> Result<String> {
+        ensure!(
+            !name.is_empty()
+                && name.len() <= 64
+                && name
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c)),
+            "invalid token name: use 1-64 letters, digits, '-', '_' or '.'"
+        );
+        let token = random();
+        let inserted = self.connection()?.execute(
+            "INSERT OR IGNORE INTO integration_tokens(hash,app,name,created) VALUES(?1,?2,?3,?4)",
+            params![digest("integration-token", &token), app, name, now()],
+        )?;
+        ensure!(inserted == 1, "token name already exists");
+        Ok(token)
+    }
+    pub fn integration_tokens(&self, app: &str) -> Result<Vec<IntegrationToken>> {
+        let db = self.connection()?;
+        let mut q = db.prepare(
+            "SELECT name,created,last_used FROM integration_tokens WHERE app=?1 ORDER BY name",
+        )?;
+        Ok(q.query_map([app], |r| {
+            Ok(IntegrationToken {
+                name: r.get(0)?,
+                created_at: r.get(1)?,
+                last_used_at: r.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+    }
+    pub fn revoke_integration_token(&self, app: &str, name: &str) -> Result<()> {
+        ensure!(
+            self.connection()?.execute(
+                "DELETE FROM integration_tokens WHERE app=?1 AND name=?2",
+                params![app, name]
+            )? == 1,
+            "token not found"
+        );
+        Ok(())
+    }
+    /// Returns the token's name when `token` is a live integration token for `app`.
+    /// Every stored digest is compared in constant time; no early exit on a match.
+    pub fn integration_token(&self, token: &str, app: &str) -> Result<Option<String>> {
+        if token.is_empty() {
+            return Ok(None);
+        }
+        let hash = digest("integration-token", token);
+        let db = self.connection()?;
+        let mut q = db.prepare("SELECT hash,name FROM integration_tokens WHERE app=?1")?;
+        let mut found = None;
+        for row in q.query_map([app], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })? {
+            let (stored, name) = row?;
+            if secure_eq(&stored, &hash) {
+                found = Some(name);
+            }
+        }
+        if let Some(name) = &found {
+            db.execute(
+                "UPDATE integration_tokens SET last_used=?1 WHERE app=?2 AND name=?3 AND (last_used IS NULL OR last_used<?1-60)",
+                params![now(), app, name],
+            )?;
+        }
+        Ok(found)
     }
 }
 fn session_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Session> {
@@ -423,6 +502,36 @@ mod store_tests {
             )
             .is_err()
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn integration_tokens_are_app_scoped_named_and_revocable() {
+        let (s, dir) = fixture();
+        let token = s.create_integration_token("a", "homepage").unwrap();
+        assert!(s.create_integration_token("a", "homepage").is_err());
+        assert!(s.create_integration_token("a", "bad name").is_err());
+        assert_eq!(
+            s.integration_token(&token, "a").unwrap().as_deref(),
+            Some("homepage")
+        );
+        assert!(s.integration_token(&token, "b").unwrap().is_none());
+        assert!(s.integration_token("", "a").unwrap().is_none());
+        assert!(s.integration_token(&random(), "a").unwrap().is_none());
+        // Only the purpose-separated digest is persisted.
+        let stored: String = s
+            .connection()
+            .unwrap()
+            .query_row("SELECT hash FROM integration_tokens", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(stored, digest("integration-token", &token));
+        assert_ne!(stored, digest("session", &token));
+        let listed = s.integration_tokens("a").unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].last_used_at.is_some());
+        assert!(s.revoke_integration_token("b", "homepage").is_err());
+        s.revoke_integration_token("a", "homepage").unwrap();
+        assert!(s.integration_token(&token, "a").unwrap().is_none());
+        assert!(s.revoke_integration_token("a", "homepage").is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]

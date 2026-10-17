@@ -2,7 +2,8 @@
 
 The frontend (`web/src/api.ts`, `web/src/App.svelte`) is the executable integration
 example. All data routes are under `/api/v1`; no token-to-API login shortcut exists.
-Use a normal Passkey session. Bodies are JSON, errors use
+Use a normal Passkey session, or a read-only integration token for the few GET
+routes listed under [Read-only integration tokens](#read-only-integration-tokens). Bodies are JSON, errors use
 `{"error":{"code","message","request_id","details"?}}` with actual HTTP status.
 All responses are `Cache-Control: no-store`. CORS is not enabled.
 
@@ -60,6 +61,36 @@ authentication within five minutes; call `/auth/reauth/begin` and `finish` when
 | `POST /api/v1/update/check` | Query GitHub Releases now; at most once per 10 seconds |
 | `POST /api/v1/update/install` | `{version}` matching the last checked release; recent auth; verifies SHA256SUMS, backs up, swaps the executable and restarts in place (Unix) |
 | `GET /healthz` | Minimal public liveness |
+
+## Read-only integration tokens
+
+A trusted server-side integration (for example a homepage that shows pinned
+bookmarks) can read without a Passkey session:
+
+```http
+GET /api/v1/bookmarks?pinned=true&limit=12
+Host: bookmark.example.com
+Authorization: Bearer <token>
+```
+
+The response is the normal list shape `{items, total, revision}`; pinned results are
+in pinned order. Tokens are accepted **only** with `GET` on exactly
+`/api/v1/bookmarks`, `/api/v1/folders`, `/api/v1/tags` and `/api/v1/library/revision`.
+Any request carrying an `Authorization` header is handled as a token request: every
+other route or method (including `HEAD`, `/api/v1/bookmarks/{id}`, writes, `/auth/*`
+and `/logout`), a request that also sends `Origin` or `Cookie`, and an unknown or
+revoked token all answer `401 UNAUTHENTICATED`. The `Host` header must still match the
+configured public URL. Token requests never set cookies, need no CSRF token, and share
+the rate limiter (60 per minute per peer, inside the 200-per-minute global ceiling;
+`429 RATE_LIMITED` beyond it).
+
+Tokens are managed on the server terminal:
+
+```sh
+bookmarkd token create homepage   # prints the token once
+bookmarkd token list              # name, created, last used (no secrets)
+bookmarkd token revoke homepage
+```
 
 Entity timestamps are UTC Unix seconds; versions and library revisions are
 monotonic integers. URLs preserve user spelling; comparison uses conservative URL
